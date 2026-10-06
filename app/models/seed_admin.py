@@ -1,4 +1,4 @@
-from app.core.database import Base
+from app.core.database import SessionLocal
 from app.models.users import User
 
 ADMIN_USER_DATA = {
