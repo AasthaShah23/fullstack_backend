@@ -1,115 +1,178 @@
-# Backend API - FastAPI & PostgreSQL
+# TongGarden Backend API
 
-A robust backend service built with **FastAPI**, **SQLAlchemy**, and **PostgreSQL**, with database migrations managed by **Alembic**.
+A production-ready REST API built with **FastAPI**, **SQLAlchemy 2**, and **PostgreSQL** — structured for scalability, testability, and clean code.
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/)
-- **Server**: [Uvicorn](https://www.uvicorn.org/)
-- **ORM**: [SQLAlchemy](https://www.sqlalchemy.org/)
-- **Database Migrations**: [Alembic](https://alembic.sqlalchemy.org/)
-- **Database**: [PostgreSQL](https://www.postgresql.org/)
-- **Driver**: `psycopg2-binary`
-- **Environment Management**: `python-dotenv`
+| Layer            | Technology                                  |
+| :--------------- | :------------------------------------------ |
+| Framework        | [FastAPI](https://fastapi.tiangolo.com/)    |
+| Server           | [Uvicorn](https://www.uvicorn.org/)         |
+| ORM              | [SQLAlchemy 2](https://www.sqlalchemy.org/) |
+| Migrations       | [Alembic](https://alembic.sqlalchemy.org/)  |
+| Database         | [PostgreSQL](https://www.postgresql.org/)   |
+| DB Driver        | `psycopg2-binary`                           |
+| Password Hashing | `argon2-cffi`                               |
+| Validation       | [Pydantic v2](https://docs.pydantic.dev/)   |
+| Config           | `python-dotenv`                             |
 
 ---
 
 ## 📁 Project Structure
 
 ```text
-backend/
-├── alembic/                      # Alembic migration scripts and configuration
-│   ├── versions/                 # Database migration revision files
-│   └── env.py                    # Alembic runtime environment
+fullstack_backend/
+│
+├── alembic/                          # Database migration engine
+│   ├── versions/                     # Auto-generated + manual migration files
+│   │   ├── 958da1df6fcd_create_users_table.py
+│   │   ├── 645261d1df41_seed_new_user_as_admin_role.py
+│   │   └── 36f3bc6327cc_create_refresh_token_table.py
+│   ├── env.py                        # Alembic runtime — wires SQLAlchemy models
+│   └── script.py.mako                # Migration file template
+│
 ├── app/
-│   ├── core/
-│   │   └── database.py           # Database engine, SessionLocal, and declarative Base
-│   ├── models/
-│   │   ├── __init__.py           # Model exports
-│   │   ├── users.py              # User SQLAlchemy model schema
-│   │   ├── refresh_tokens.py     # RefreshToken SQLAlchemy model schema
-│   │   └── seed_admin.py         # Admin user database seeder script
-│   └── main.py                   # FastAPI application initialization & routes
-├── .env.example                  # Template for required environment variables
-├── .gitignore                    # Git ignore file (excludes .venv and .env)
-├── alembic.ini                   # Alembic configuration
-├── requirements.txt              # Project dependencies
-└── README.md                     # Setup and usage guide
+│   ├── api/                          # HTTP layer — routers only (thin controllers)
+│   │   ├── __init__.py               # Aggregates all feature routers → api_router
+│   │   └── auth/
+│   │       ├── __init__.py
+│   │       └── router.py             # POST /api/auth/signup
+│   │
+│   ├── core/                         # Shared infrastructure — no business logic here
+│   │   ├── config.py                 # Settings loaded from .env (single source of truth)
+│   │   ├── database.py               # SQLAlchemy engine, SessionLocal, Base
+│   │   ├── deps.py                   # FastAPI dependencies (get_db session injector)
+│   │   ├── logging.py                # setup_logging() + get_logger() factory
+│   │   └── security.py              # hash_password() / verify_password() — Argon2
+│   │
+│   ├── features/                     # Feature-slice modules (co-locate by feature)
+│   │   └── auth/
+│   │       ├── repository.py         # All DB queries for auth (no business logic)
+│   │       ├── schema.py             # Pydantic request/response models for auth
+│   │       └── service.py            # Auth business logic (signup, future: login)
+│   │
+│   ├── models/                       # SQLAlchemy ORM table definitions
+│   │   ├── __init__.py               # Exports User, RefreshToken
+│   │   ├── users.py                  # users table
+│   │   ├── refresh_tokens.py         # refresh_tokens table
+│   │   └── seed_admin.py            # Standalone script to seed the admin user
+│   │
+│   └── main.py                       # App entry point — logging bootstrap, middleware, routers
+│
+├── .env                              # Your local secrets (git-ignored)
+├── .env.example                      # Template — copy this to .env
+├── .gitignore
+├── alembic.ini                       # Alembic config (DB URL read from .env)
+├── requirements.txt                  # Pinned dependencies
+└── README.md
 ```
 
 ---
 
-## 📋 Database Schema
+## 🗄️ Database Schema
 
-### `users` Table
+### `users`
 
-| Column | Type | Constraints / Default | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `Integer` | Primary Key, Indexed | Unique user identifier |
-| `name` | `String` | `nullable=False` | Full name of the user |
-| `email` | `String` | Unique, Indexed, `nullable=False` | User email address |
-| `password` | `String` | `nullable=False` | Hashed password string |
-| `role` | `String` | `default="user"`, `nullable=False` | Role designation (`admin`, `user`, etc.) |
-| `is_email_verified` | `Boolean` | `default=False`, `nullable=False` | Verification status flag |
-| `is_active` | `Boolean` | `default=True`, `nullable=False` | Active status flag |
-| `created_at` | `DateTime(timezone=True)` | `server_default=now()`, `nullable=False` | Record creation timestamp |
-| `updated_at` | `DateTime(timezone=True)` | `server_default=now()`, auto-updates | Record modification timestamp |
+| Column              | Type           | Constraints                         | Description               |
+| :------------------ | :------------- | :---------------------------------- | :------------------------ |
+| `id`                | `Integer`      | PK, Indexed                         | Auto-increment identifier |
+| `name`              | `String`       | `NOT NULL`                          | Full display name         |
+| `email`             | `String`       | Unique, Indexed, `NOT NULL`         | Login email               |
+| `password`          | `String`       | `NOT NULL`                          | Argon2 password hash      |
+| `role`              | `String`       | `default='user'`, `NOT NULL`        | `admin` or `user`         |
+| `is_email_verified` | `Boolean`      | `default=False`, `NOT NULL`         | Email verification flag   |
+| `is_active`         | `Boolean`      | `default=True`, `NOT NULL`          | Account status flag       |
+| `created_at`        | `DateTime(tz)` | `server_default=now()`              | Creation timestamp        |
+| `updated_at`        | `DateTime(tz)` | `server_default=now()`, auto-update | Last modified timestamp   |
 
-### `refresh_tokens` Table
+### `refresh_tokens`
 
-| Column | Type | Constraints / Default | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `Integer` | Primary Key, Indexed | Unique token identifier |
-| `user_id` | `Integer` | Foreign Key (`users.id`, `CASCADE`), Indexed, `nullable=False` | Associated user reference |
-| `token_hash` | `String` | Unique, Indexed, `nullable=False` | Secure hash of the refresh token |
-| `expires_at` | `DateTime(timezone=True)` | `nullable=False` | Expiration date and time |
-| `revoked_at` | `DateTime(timezone=True)` | `nullable=True` | Revocation timestamp (null if active) |
-| `created_at` | `DateTime(timezone=True)` | `server_default=now()`, `nullable=False` | Token issuance timestamp |
-| `updated_at` | `DateTime(timezone=True)` | `server_default=now()`, auto-updates | Record update timestamp |
-
----
-
-## 🚀 Getting Started (Local Setup)
-
-### 1. Prerequisites
-
-Ensure you have the following installed on your machine:
-- **Python**: Version 3.11 or higher
-- **PostgreSQL**: Installed and running locally
-- **Git**
+| Column       | Type           | Constraints                         | Description                       |
+| :----------- | :------------- | :---------------------------------- | :-------------------------------- |
+| `id`         | `Integer`      | PK, Indexed                         | Auto-increment identifier         |
+| `user_id`    | `Integer`      | FK → `users.id` CASCADE, `NOT NULL` | Owner reference                   |
+| `token_hash` | `String`       | Unique, Indexed, `NOT NULL`         | Hashed refresh token              |
+| `expires_at` | `DateTime(tz)` | `NOT NULL`                          | Token expiry                      |
+| `revoked_at` | `DateTime(tz)` | Nullable                            | Null if active, set on revocation |
+| `created_at` | `DateTime(tz)` | `server_default=now()`              | Issuance timestamp                |
+| `updated_at` | `DateTime(tz)` | `server_default=now()`, auto-update | Last modified timestamp           |
 
 ---
 
-### 2. Navigate to Backend Directory
+## 🚀 Local Setup
+
+### Prerequisites
+
+Make sure you have these installed before starting:
+
+| Tool       | Version | Download                        |
+| :--------- | :------ | :------------------------------ |
+| Python     | 3.11+   | https://python.org/downloads    |
+| PostgreSQL | 14+     | https://postgresql.org/download |
+| Git        | any     | https://git-scm.com             |
+
+---
+
+### Step 1 — Clone the repository
 
 ```bash
-cd backend
+git clone <your-repo-url>
+cd fullstack_backend
 ```
 
 ---
 
-### 3. Create and Activate Virtual Environment
+### Step 2 — Create a local PostgreSQL database
 
-Create an isolated Python environment:
+Use **pgAdmin** — the official PostgreSQL GUI that comes bundled with every PostgreSQL installer (Windows, macOS, Linux). No terminal path issues, works the same everywhere.
+
+> Don't have pgAdmin? Download it free from https://www.pgadmin.org/download/
+
+**Follow these steps:**
+
+**1.** Open **pgAdmin** and connect to your local server
+- In the left panel expand **Servers → PostgreSQL**
+- Enter your `postgres` user password if prompted
+
+**2.** Right-click on **Databases** → click **Create → Database…**
+
+**3.** In the **General** tab, set the **Database** name to:
+```
+fullstack_task
+```
+
+**4.** Click **Save**
+
+**5.** You should now see `fullstack_task` listed under **Databases** in the left panel ✅
+
+> **Note:** Make sure the PostgreSQL server service is running before opening pgAdmin.
+> - **Windows** — Search *Services* → find `postgresql-x64-16` → click **Start**
+> - **macOS** — Run `brew services start postgresql@16` in Terminal
+> - **Linux** — Run `sudo systemctl start postgresql` in Terminal
+
+---
+
+### Step 3 — Create and activate a virtual environment
+
+#### macOS / Linux
 
 ```bash
-# Create virtual environment
 python3 -m venv .venv
-
-# Activate on macOS / Linux:
 source .venv/bin/activate
+```
 
-# Or on Windows (PowerShell):
-# .venv\Scripts\Activate.ps1
+#### Windows (PowerShell)
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
 ---
 
-### 4. Install Dependencies
-
-Install all required packages from `requirements.txt`:
+### Step 4 — Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -117,80 +180,259 @@ pip install -r requirements.txt
 
 ---
 
-### 5. Configure Environment Variables
+### Step 5 — Configure environment variables
 
-1. Copy the sample environment file:
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+# macOS / Linux
+cp .env.example .env
 
-2. Open `.env` and set your PostgreSQL database connection URL:
-   ```env
-   DATABASE_URL=postgresql://<username>:<password>@localhost:5432/<database_name>
-   SALT=your_salt_value_here
-   ```
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
 
-> **Note**: Make sure the PostgreSQL database specified in `DATABASE_URL` exists before running migrations. You can create it using `createdb <database_name>` or via PostgreSQL CLI / pgAdmin.
+Now open `.env` and fill in your database credentials:
+
+```env
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/fullstack_task
+LOG_LEVEL=DEBUG
+```
+
+> **Replace** `your_password` with the password you set during PostgreSQL installation.  
+> If you installed PostgreSQL with no password, use: `postgresql://postgres@localhost:5432/fullstack_task`
 
 ---
 
-### 6. Run Database Migrations
+### Step 6 — Run database migrations
 
-Apply existing Alembic migrations to create all database tables and indexes:
+Apply all migrations (creates tables + seeds the admin user):
 
 ```bash
 alembic upgrade head
 ```
 
-To verify the current migration state:
+Verify the migration ran successfully:
 
 ```bash
 alembic current
 ```
 
----
-
-### 7. Seed the Initial Admin User
-
-Run the idempotent admin seeding script to create or update the default admin user:
-
-```bash
-python -m app.models.seed_admin
-```
-
-#### Default Admin Credentials:
-- **Name**: `Aastha Shah`
-- **Email**: `aastha@gmail.com`
-- **Role**: `admin`
-- **Email Verified**: `True`
-- **Active**: `True`
-
-*(Note: The script is idempotent; if the email already exists, it updates the record instead of throwing a unique constraint error).*
+You should see the latest revision ID (`36f3bc6327cc`) with `(head)` next to it.
 
 ---
 
-### 8. Run the Development Server
-
-Start the FastAPI application using Uvicorn with auto-reload enabled:
+### Step 7 — Start the development server
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The application will start at:
-- **API URL**: [http://localhost:8000](http://localhost:8000)
-- **Interactive Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Alternative ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+The server is now running at:
+
+| URL                         | Description            |
+| :-------------------------- | :--------------------- |
+| http://localhost:8000       | Health check (`GET /`) |
+| http://localhost:8000/docs  | Interactive Swagger UI |
+| http://localhost:8000/redoc | ReDoc API reference    |
+
+---
+
+## 🔑 Default Admin Account
+
+The migration automatically seeds an admin user:
+
+| Field     | Value              |
+| :-------- | :----------------- |
+| **Name**  | Aastha Shah        |
+| **Email** | `aastha@gmail.com` |
+| **Role**  | `admin`            |
+
+> The seed is **idempotent** — running `alembic upgrade head` multiple times will not create duplicate rows.
+
+---
+
+## 📡 API Endpoints
+
+### Auth Summary
+
+| Method | Endpoint | Description | Auth |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/signup` | Register a new user account | Public |
+| `POST` | `/api/auth/login` | Authenticate existing user | Public |
+| `POST` | `/api/auth/refresh` | Obtain new access token & rotate refresh token | Public |
+| `POST` | `/api/auth/logout` | Revoke refresh token (`revoked_at = now()`) | Public |
+
+---
+
+### Endpoint Details
+
+#### 1. `POST /api/auth/signup`
+
+Registers a new user account with strong password validation (requires uppercase, lowercase, digit, and special character).
+
+**Request Body:**
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "password": "Str0ng!Pass123"
+}
+```
+
+**Success — `201 Created`:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "a3f8c2d9e1...",
+  "user": {
+    "id": 5,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "role": "user"
+  }
+}
+```
+
+**Errors:**
+- `409 Conflict`: An account with this email address already exists.
+- `422 Unprocessable Entity`: Password fails strength requirements or min length.
+
+---
+
+#### 2. `POST /api/auth/login`
+
+Authenticates user credentials and issues new access and refresh tokens.
+
+**Request Body:**
+```json
+{
+  "email": "jane@example.com",
+  "password": "Str0ng!Pass123"
+}
+```
+
+**Success — `200 OK`:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "b9f2c1d8e4...",
+  "user": {
+    "id": 5,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "role": "user"
+  }
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Invalid email or password.
+- `403 Forbidden`: Account is deactivated.
+
+---
+
+#### 3. `POST /api/auth/refresh`
+
+Exchanges an active refresh token for a new access token (15 mins) and a rotated refresh token (7 days).
+
+**Request Body:**
+```json
+{
+  "refresh_token": "b9f2c1d8e4..."
+}
+```
+
+**Success — `200 OK`:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "c7a1b3d5e9...",
+  "user": {
+    "id": 5,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "role": "user"
+  }
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Refresh token is invalid, expired, or revoked.
+
+---
+
+#### 4. `POST /api/auth/logout`
+
+Revokes the refresh token in PostgreSQL by updating its `revoked_at` timestamp.
+
+**Request Body:**
+```json
+{
+  "refresh_token": "c7a1b3d5e9..."
+}
+```
+
+**Success — `200 OK`:**
+```json
+{
+  "message": "Successfully logged out."
+}
+```
+
+**Errors:**
+- `400 Bad Request`: Refresh token is invalid or already revoked.
 
 ---
 
 ## 🛠 Common Development Commands
 
-| Action | Command |
-| :--- | :--- |
-| **Start server** | `uvicorn app.main:app --reload` |
-| **Apply migrations** | `alembic upgrade head` |
-| **Check migration status** | `alembic current` |
-| **Create new migration** | `alembic revision --autogenerate -m "description"` |
-| **Rollback migration** | `alembic downgrade -1` |
-| **Seed admin user** | `python -m app.models.seed_admin` |
+| Action                     | Command                                                |
+| :------------------------- | :----------------------------------------------------- |
+| Start server (with reload) | `uvicorn app.main:app --reload`                        |
+| Apply all migrations       | `alembic upgrade head`                                 |
+| Roll back last migration   | `alembic downgrade -1`                                 |
+| Check current migration    | `alembic current`                                      |
+| View migration history     | `alembic history --verbose`                            |
+| Create a new migration     | `alembic revision --autogenerate -m "describe change"` |
+| Seed admin user manually   | `python -m app.models.seed_admin`                      |
+
+---
+
+## 🪵 Logging
+
+Logs are written to **stdout** in this format:
+
+```
+2026-10-08 12:00:00 | INFO     | app.api.auth.router | signup:31 | Signup request received for email=jane@example.com
+2026-10-08 12:00:00 | DEBUG    | app.features.auth.service | signup_user:40 | Checking email availability
+2026-10-08 12:00:00 | INFO     | app.main | log_requests:45 | RESPONSE [a1b2c3d4] status=201  duration=42.15ms
+```
+
+Control verbosity via `.env`:
+
+```env
+LOG_LEVEL=DEBUG    # Show everything (development)
+LOG_LEVEL=INFO     # Show business events only (staging)
+LOG_LEVEL=WARNING  # Show warnings and errors only (production)
+```
+
+---
+
+## ⚙️ Architecture Overview
+
+```
+Request
+  │
+  ▼
+app/api/auth/router.py       ← HTTP layer    (FastAPI route, request/response models)
+  │
+  ▼
+app/features/auth/service.py ← Business layer (validation logic, error handling)
+  │
+  ▼
+app/features/auth/repository.py ← Data layer (all SQL/ORM queries, DB session)
+  │
+  ▼
+PostgreSQL
+```
+
+Each layer has a **single responsibility** — this makes the code easy to test, maintain, and extend.
