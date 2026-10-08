@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.logging import get_logger
-from app.features.auth.schema import LoginRequest, SignUpRequest, TokenResponse
-from app.features.auth.service import login_user, signup_user
+from app.features.auth.schema import LoginRequest, RefreshTokenRequest, SignUpRequest, TokenResponse
+from app.features.auth.service import login_user, refresh_access_token, signup_user
 
 logger = get_logger(__name__)
 
@@ -50,4 +50,21 @@ def login(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     token_response = login_user(db, payload)
+    return token_response
+
+# POST /api/auth/refresh
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Refresh access token",
+    description=(
+        "Exchanges a valid refresh token for a new JWT access token and a rotated refresh token."
+    ),
+)
+def refresh(
+    payload: RefreshTokenRequest,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    token_response = refresh_access_token(db, payload)
     return token_response

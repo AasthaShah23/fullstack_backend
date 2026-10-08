@@ -26,7 +26,6 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 
 
 def get_user_by_id(db: Session, user_id: int) -> User | None:
-    """Return the User row matching *user_id*, or None if not found."""
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         logger.debug("Found user: user_id=%s  email=%s", user.id, user.email)
@@ -86,3 +85,28 @@ def create_refresh_token(db: Session, *, user_id: int, token_hash: str) -> Refre
         )
         raise
     return refresh_token
+
+
+def get_hash_refresh_token(db: Session, token_hash: str) -> RefreshToken | None:
+    """Return the RefreshToken row matching *token_hash*, or None if not found."""
+    token = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
+    if token:
+        logger.debug("Found refresh token record: id=%s  user_id=%s", token.id, token.user_id)
+    else:
+        logger.debug("No refresh token record found for token_hash")
+    return token
+
+
+def revoke_refresh_token(db: Session, refresh_token: RefreshToken) -> None:
+    """Mark a refresh token record as revoked by setting revoked_at to current timestamp."""
+    try:
+        refresh_token.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(refresh_token)
+        logger.debug("Revoked refresh token id=%s for user_id=%s", refresh_token.id, refresh_token.user_id)
+    except Exception:
+        db.rollback()
+        logger.error(
+            "Failed to revoke refresh token id=%s", refresh_token.id, exc_info=True
+        )
+        raise

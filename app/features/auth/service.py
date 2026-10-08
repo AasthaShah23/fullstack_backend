@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,9 +14,18 @@ from app.core.security import (
 from app.features.auth.repository import (
     create_refresh_token,
     create_user,
+    get_hash_refresh_token,
     get_user_by_email,
+    get_user_by_id,
+    revoke_refresh_token,
 )
-from app.features.auth.schema import LoginRequest, SignUpRequest, TokenResponse, UserResponse
+from app.features.auth.schema import (
+    LoginRequest,
+    RefreshTokenRequest,
+    SignUpRequest,
+    TokenResponse,
+    UserResponse,
+)
 
 logger = get_logger(__name__)
 
@@ -125,5 +136,87 @@ def login_user(db: Session, payload: LoginRequest) -> TokenResponse:
     return TokenResponse(
         access_token=access_token,
         refresh_token=raw_refresh_token,
+        user=UserResponse.model_validate(user),
+    )
+
+
+def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResponse:
+    """
+    Exchange a valid refresh token for a new access token and a new rotated refresh token.
+
+    Steps:
+        1. Hash the incoming raw refresh token.
+        2. Query database for matching token record.
+        3. Validate record exists, is not revoked, and is not expired.
+        4. Validate user exists and is active.
+        5. Revoke old refresh token (Token Rotation).
+        6. Generate and store a new refresh token.
+        7. Generate a new JWT access token.
+        8. Return new tokens + user profile.
+    """
+    token_hash = hash_refresh_token(payload.refresh_token)
+    token_record = get_hash_refresh_token(db, token_hash)
+
+    if not token_record:
+        logger.warning("Refresh failed — token hash not found in database")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token.",
+        )
+
+    if token_record.revoked_at is not None:
+        logger.warning(
+            "Refresh failed — token id=%s was already revoked at %s",
+            token_record.id,
+            token_record.revoked_at,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token.",
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = token_record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < now:
+        logger.warning("Refresh failed — token id=%s has expired", token_record.id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token.",
+        )
+
+    user = get_user_by_id(db, token_record.user_id)
+    if not user or not user.is_active:
+        logger.warning(
+            "Refresh failed — user_id=%s does not exist or is inactive",
+            token_record.user_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive or no longer exists.",
+        )
+
+    # Token Rotation: Revoke old token, create new token
+    revoke_refresh_token(db, token_record)
+
+    new_raw_refresh_token = generate_refresh_token()
+    new_token_hash = hash_refresh_token(new_raw_refresh_token)
+    create_refresh_token(db, user_id=user.id, token_hash=new_token_hash)
+
+    new_access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role,
+    )
+
+    logger.info(
+        "Token refresh successful — user_id=%s  email=%s", user.id, user.email
+    )
+
+    return TokenResponse(
+        access_token=new_access_token,
+        refresh_token=new_raw_refresh_token,
         user=UserResponse.model_validate(user),
     )

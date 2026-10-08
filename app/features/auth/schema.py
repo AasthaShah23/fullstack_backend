@@ -52,6 +52,13 @@ class LoginRequest(BaseModel):
         description="Account password.",
     )
 
+# Request schema for token refresh
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(
+        ...,
+        description="Opaque refresh token received from login or signup.",
+    )
+
 # Response schemas
 class UserResponse(BaseModel):
     id: int
