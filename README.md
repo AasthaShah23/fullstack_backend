@@ -252,30 +252,39 @@ The migration automatically seeds an admin user:
 
 ## 📡 API Endpoints
 
-### Auth
+### Auth Summary
 
-| Method | Endpoint           | Description                 | Auth   |
-| :----- | :----------------- | :-------------------------- | :----- |
+| Method | Endpoint | Description | Auth |
+| :--- | :--- | :--- | :--- |
 | `POST` | `/api/auth/signup` | Register a new user account | Public |
+| `POST` | `/api/auth/login` | Authenticate existing user | Public |
+| `POST` | `/api/auth/refresh` | Obtain new access token & rotate refresh token | Public |
+| `POST` | `/api/auth/logout` | Revoke refresh token (`revoked_at = now()`) | Public |
 
-#### `POST /api/auth/signup`
+---
 
-**Request body:**
+### Endpoint Details
 
+#### 1. `POST /api/auth/signup`
+
+Registers a new user account with strong password validation (requires uppercase, lowercase, digit, and special character).
+
+**Request Body:**
 ```json
 {
   "name": "Jane Doe",
   "email": "jane@example.com",
-  "password": "Str0ng!Pass"
+  "password": "Str0ng!Pass123"
 }
 ```
 
 **Success — `201 Created`:**
-
 ```json
 {
-  "message": "Account created successfully.",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "a3f8c2d9e1...",
   "user": {
+    "id": 5,
     "name": "Jane Doe",
     "email": "jane@example.com",
     "role": "user"
@@ -283,21 +292,94 @@ The migration automatically seeds an admin user:
 }
 ```
 
-**Error — `409 Conflict`** (email already registered):
+**Errors:**
+- `409 Conflict`: An account with this email address already exists.
+- `422 Unprocessable Entity`: Password fails strength requirements or min length.
 
+---
+
+#### 2. `POST /api/auth/login`
+
+Authenticates user credentials and issues new access and refresh tokens.
+
+**Request Body:**
 ```json
 {
-  "detail": "An account with this email address already exists."
+  "email": "jane@example.com",
+  "password": "Str0ng!Pass123"
 }
 ```
 
-**Error — `422 Unprocessable Entity`** (validation failure, e.g. short password):
-
+**Success — `200 OK`:**
 ```json
 {
-  "detail": [{ "loc": ["body", "password"], "msg": "...", "type": "..." }]
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "b9f2c1d8e4...",
+  "user": {
+    "id": 5,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "role": "user"
+  }
 }
 ```
+
+**Errors:**
+- `401 Unauthorized`: Invalid email or password.
+- `403 Forbidden`: Account is deactivated.
+
+---
+
+#### 3. `POST /api/auth/refresh`
+
+Exchanges an active refresh token for a new access token (15 mins) and a rotated refresh token (7 days).
+
+**Request Body:**
+```json
+{
+  "refresh_token": "b9f2c1d8e4..."
+}
+```
+
+**Success — `200 OK`:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "c7a1b3d5e9...",
+  "user": {
+    "id": 5,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "role": "user"
+  }
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Refresh token is invalid, expired, or revoked.
+
+---
+
+#### 4. `POST /api/auth/logout`
+
+Revokes the refresh token in PostgreSQL by updating its `revoked_at` timestamp.
+
+**Request Body:**
+```json
+{
+  "refresh_token": "c7a1b3d5e9..."
+}
+```
+
+**Success — `200 OK`:**
+```json
+{
+  "message": "Successfully logged out."
+}
+```
+
+**Errors:**
+- `400 Bad Request`: Refresh token is invalid or already revoked.
 
 ---
 
