@@ -21,6 +21,7 @@ from app.features.auth.repository import (
 )
 from app.features.auth.schema import (
     LoginRequest,
+    LogoutResponse,
     RefreshTokenRequest,
     SignUpRequest,
     TokenResponse,
@@ -220,3 +221,27 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
         refresh_token=new_raw_refresh_token,
         user=UserResponse.model_validate(user),
     )
+
+
+def logout_user(db: Session, payload: RefreshTokenRequest) -> LogoutResponse:
+   
+    token_hash = hash_refresh_token(payload.refresh_token)
+    token_record = get_hash_refresh_token(db, token_hash)
+
+    if not token_record or token_record.revoked_at is not None:
+        logger.warning("Logout attempted with invalid or already revoked refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or already revoked refresh token.",
+        )
+
+    # Invalidate token by setting revoked_at to current timestamp
+    revoke_refresh_token(db, token_record)
+
+    logger.info(
+        "User logged out successfully — refresh token id=%s revoked for user_id=%s",
+        token_record.id,
+        token_record.user_id,
+    )
+
+    return LogoutResponse()

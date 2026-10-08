@@ -68,8 +68,12 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-# Response schema for the signup route
+# Response schema for the signup/login/refresh route
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     user: UserResponse
+
+# Response schema for the logout route
+class LogoutResponse(BaseModel):
+    message: str = "Successfully logged out."

@@ -3,8 +3,14 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.logging import get_logger
-from app.features.auth.schema import LoginRequest, RefreshTokenRequest, SignUpRequest, TokenResponse
-from app.features.auth.service import login_user, refresh_access_token, signup_user
+from app.features.auth.schema import (
+    LoginRequest,
+    LogoutResponse,
+    RefreshTokenRequest,
+    SignUpRequest,
+    TokenResponse,
+)
+from app.features.auth.service import login_user, logout_user, refresh_access_token, signup_user
 
 logger = get_logger(__name__)
 
@@ -68,3 +74,20 @@ def refresh(
 ) -> TokenResponse:
     token_response = refresh_access_token(db, payload)
     return token_response
+
+# POST /api/auth/logout
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Logout user",
+    description=(
+        "Revokes the provided refresh token by updating its `revoked_at` timestamp."
+    ),
+)
+def logout(
+    payload: RefreshTokenRequest,
+    db: Session = Depends(get_db),
+) -> LogoutResponse:
+    response = logout_user(db, payload)
+    return response
