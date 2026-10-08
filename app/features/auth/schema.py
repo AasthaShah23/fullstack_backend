@@ -1,4 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field
+import re
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # Request schemas
@@ -23,6 +24,33 @@ class SignUpRequest(BaseModel):
         description="Plain-text password (will be hashed before storage).",
     )
 
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>\-_=+\\|/[\]~`]", v):
+            raise ValueError("Password must contain at least one special character")
+        return v
+
+# Request schema for the login route
+class LoginRequest(BaseModel):
+    email: EmailStr = Field(
+        ...,
+        examples=["jane@example.com"],
+        description="Registered email address.",
+    )
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        examples=["Str0ng!Pass"],
+        description="Account password.",
+    )
 
 # Response schemas
 class UserResponse(BaseModel):

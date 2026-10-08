@@ -7,13 +7,14 @@ from app.core.security import (
     generate_refresh_token,
     hash_password,
     hash_refresh_token,
+    verify_password,
 )
 from app.features.auth.repository import (
     create_refresh_token,
     create_user,
     get_user_by_email,
 )
-from app.features.auth.schema import SignUpRequest, TokenResponse, UserResponse
+from app.features.auth.schema import LoginRequest, SignUpRequest, TokenResponse, UserResponse
 
 logger = get_logger(__name__)
 
@@ -75,4 +76,54 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
         access_token=access_token,
         refresh_token=raw_refresh_token,   # raw token → goes to client
         user=UserResponse.model_validate(new_user),
+    )
+
+
+def login_user(db: Session, payload: LoginRequest) -> TokenResponse:
+    user = get_user_by_email(db, email=payload.email)
+
+    if not user or not verify_password(payload.password, user.password):
+        logger.warning(
+            "Login failed — invalid credentials for email=%s", payload.email
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    if not user.is_active:
+        logger.warning(
+            "Login rejected — account deactivated for user_id=%s  email=%s",
+            user.id,
+            user.email,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated. Please contact support.",
+        )
+
+    # Generate JWT access token
+    access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role,
+    )
+
+    # Generate + store refresh token
+    raw_refresh_token = generate_refresh_token()
+    token_hash = hash_refresh_token(raw_refresh_token)
+    create_refresh_token(db, user_id=user.id, token_hash=token_hash)
+
+    logger.info(
+        "Login successful — user_id=%s  email=%s  role=%s",
+        user.id,
+        user.email,
+        user.role,
+    )
+
+    # Return response
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=raw_refresh_token,
+        user=UserResponse.model_validate(user),
     )
