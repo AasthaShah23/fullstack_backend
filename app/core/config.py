@@ -1,23 +1,17 @@
 import os
-
 from dotenv import load_dotenv
 
 load_dotenv()
-
-
 class Settings:
-    """Application-wide settings loaded from environment variables."""
-
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
+    SECRET_KEY: str = os.getenv("SECRET_KEY")
+    ALGORITHM: str = os.getenv("ALGORITHM")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
-        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
     )
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(
-        os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7")
+        os.getenv("REFRESH_TOKEN_EXPIRE_DAYS")
     )
-
 
 settings = Settings()
 

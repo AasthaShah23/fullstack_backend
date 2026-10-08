@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 
+
+# Request schemas
 class SignUpRequest(BaseModel):
     name: str = Field(
         ...,
@@ -21,15 +23,18 @@ class SignUpRequest(BaseModel):
         description="Plain-text password (will be hashed before storage).",
     )
 
+
+# Response schemas
 class UserResponse(BaseModel):
+    id: int
     name: str
     email: EmailStr
     role: str
 
     model_config = {"from_attributes": True}
 
-
-class SignUpResponse(BaseModel):
-    message: str
+# Response schema for the signup route
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
     user: UserResponse
-
