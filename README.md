@@ -261,6 +261,12 @@ The migration automatically seeds an admin user:
 | `POST` | `/api/auth/refresh` | Obtain new access token & rotate refresh token | Public |
 | `POST` | `/api/auth/logout` | Revoke refresh token (`revoked_at = now()`) | Public |
 
+### Admin Summary
+
+| Method | Endpoint | Description | Auth |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/admin/users` | List all registered users (paginated) | `Bearer` (`admin` role) |
+
 ---
 
 ### Endpoint Details
@@ -380,6 +386,46 @@ Revokes the refresh token in PostgreSQL by updating its `revoked_at` timestamp.
 
 **Errors:**
 - `400 Bad Request`: Refresh token is invalid or already revoked.
+
+---
+
+#### 5. `GET /api/admin/users`
+
+Lists all registered users in the system. **Strictly requires `admin` role.**
+
+**Query Parameters:**
+- `skip` *(int, optional, default: 0)*: Number of records to skip for pagination.
+- `limit` *(int, optional, default: 100, max: 500)*: Max number of records to return.
+
+**Headers:**
+```http
+Authorization: Bearer <admin_access_token>
+```
+
+**Success — `200 OK`:**
+```json
+{
+  "total": 2,
+  "users": [
+    {
+      "id": 1,
+      "name": "Aastha Shah",
+      "email": "aastha@gmail.com",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "role": "user"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Missing, invalid, or expired JWT access token.
+- `403 Forbidden`: Authenticated user does not have the `admin` role (e.g. `role: "user"`).
 
 ---
 

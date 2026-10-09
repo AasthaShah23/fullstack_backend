@@ -1,24 +1,99 @@
 """
-Database dependency for FastAPI route handlers.
+Core dependencies for FastAPI route handlers:
+- Database session injection (`get_db`)
+- JWT authentication (`get_current_user`)
+- Role-based authorization (`require_role`, `require_admin`)
 """
 
 from collections.abc import Generator
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.logging import get_logger
+from app.core.security import decode_access_token
+from app.features.auth.repository import get_user_by_id
+from app.models.users import User
+
+logger = get_logger(__name__)
+
+# OAuth2 Bearer scheme for token extraction & Swagger UI support
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def get_db() -> Generator[Session, None, None]:
-    """
-    Yield a SQLAlchemy database session and ensure it is closed afterwards.
-
-    Usage:
-        db: Session = Depends(get_db)
-    """
+ 
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
+# Authentication dependency
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    try:
+        payload = decode_access_token(token)
+        user_id_str: str = payload.get("sub")
+
+        if not user_id_str:
+            logger.warning("JWT missing 'sub' claim")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        user_id = int(user_id_str)
+    except (JWTError, ValueError):
+        logger.warning("Failed to decode or parse JWT access token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = get_user_by_id(db, user_id=user_id)
+    if not user:
+        logger.warning("User id=%s from JWT not found in DB", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User no longer exists.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        logger.warning("Deactivated user id=%s attempted access", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated.",
+        )
+
+    return user
+
+# Role-based authorization dependency
+def require_role(required_role: str):
+
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != required_role:
+            logger.warning(
+                "Access denied — user_id=%s with role='%s' attempted to access route requiring role='%s'",
+                current_user.id,
+                current_user.role,
+                required_role,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Requires '{required_role}' role.",
+            )
+        return current_user
+
+    return role_checker
+
+
+# Convenient pre-configured dependency for admin-only routes
+require_admin = require_role("admin")
