@@ -2,14 +2,19 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request, Response
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api import api_router
 from app.core.logging import get_logger, setup_logging
+from app.core.rate_limiter import limiter
 
+# Bootstrap logging — must run first
 setup_logging()
 
 logger = get_logger(__name__)
 
+# FastAPI app instance
 app = FastAPI(
     title="TongGarden API",
     description="Backend API for the TongGarden full-stack application.",
@@ -17,6 +22,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Attach rate limiter to app state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 # ---------------------------------------------------------------------------
 # Middleware — log every request + response with timing

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.logging import get_logger
+from app.core.rate_limiter import limiter
 from app.features.auth.schema import (
     LoginRequest,
     LogoutResponse,
@@ -51,7 +52,9 @@ def signup(
         "Authenticates an existing user."
     ),
 )
+@limiter.limit("5/minute")
 def login(
+    request: Request,
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:

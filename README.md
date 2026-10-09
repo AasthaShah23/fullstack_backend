@@ -318,7 +318,7 @@ Registers a new user account with strong password validation (requires uppercase
 
 #### 2. `POST /api/auth/login`
 
-Authenticates user credentials and issues new access and refresh tokens.
+Authenticates user credentials and issues new access and refresh tokens. Rate limited to **5 attempts per minute per IP** to prevent brute-force attacks.
 
 **Request Body:**
 
@@ -348,6 +348,7 @@ Authenticates user credentials and issues new access and refresh tokens.
 
 - `401 Unauthorized`: Invalid email or password.
 - `403 Forbidden`: Account is deactivated.
+- `429 Too Many Requests`: Exceeded 5 login attempts per minute per IP.
 
 ---
 
