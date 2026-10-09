@@ -57,3 +57,11 @@ def generate_refresh_token() -> str:
 # Refresh Token — hash for DB storage
 def hash_refresh_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode()).hexdigest()
+
+# Password Reset Token — random opaque string
+def generate_reset_token() -> str:
+    return secrets.token_hex(32)
+
+# Password Reset Token — hash for DB storage
+def hash_reset_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode()).hexdigest()

@@ -5,13 +5,24 @@ from app.core.deps import get_db
 from app.core.logging import get_logger
 from app.core.rate_limiter import limiter
 from app.features.auth.schema import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     LogoutResponse,
     RefreshTokenRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     SignUpRequest,
     TokenResponse,
 )
-from app.features.auth.service import login_user, logout_user, refresh_access_token, signup_user
+from app.features.auth.service import (
+    login_user,
+    logout_user,
+    process_forgot_password,
+    process_reset_password,
+    refresh_access_token,
+    signup_user,
+)
 
 logger = get_logger(__name__)
 
@@ -94,3 +105,45 @@ def logout(
 ) -> LogoutResponse:
     response = logout_user(db, payload)
     return response
+
+
+# POST /api/auth/forgot-password
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Request password reset link",
+    description=(
+        "Generates a single-use 15-minute password reset token and logs the mock email link. "
+        "Returns a generic response to prevent user email enumeration. Rate limited to 3 requests/min per IP."
+    ),
+)
+@limiter.limit("3/minute")
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+) -> ForgotPasswordResponse:
+    logger.info("Forgot password request for email=%s", payload.email)
+    return process_forgot_password(db, payload)
+
+
+# POST /api/auth/reset-password
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reset password using token",
+    description=(
+        "Validates the reset token, updates the user's password using Argon2, "
+        "invalidates the reset token, and revokes all existing sessions. Rate limited to 5 requests/min per IP."
+    ),
+)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+) -> ResetPasswordResponse:
+    logger.info("Reset password request submitted")
+    return process_reset_password(db, payload)
