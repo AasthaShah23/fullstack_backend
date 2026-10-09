@@ -46,7 +46,7 @@ def get_current_user(
             logger.warning("JWT missing 'sub' claim")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials.",
+                detail="Could not validate credentials....",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         user_id = int(user_id_str)
@@ -54,7 +54,7 @@ def get_current_user(
         logger.warning("Failed to decode or parse JWT access token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials.",
+            detail="You are not authenticated. Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

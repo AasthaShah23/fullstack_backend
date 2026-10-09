@@ -133,12 +133,14 @@ Use **pgAdmin** — the official PostgreSQL GUI that comes bundled with every Po
 **Follow these steps:**
 
 **1.** Open **pgAdmin** and connect to your local server
+
 - In the left panel expand **Servers → PostgreSQL**
 - Enter your `postgres` user password if prompted
 
 **2.** Right-click on **Databases** → click **Create → Database…**
 
 **3.** In the **General** tab, set the **Database** name to:
+
 ```
 fullstack_task
 ```
@@ -148,7 +150,8 @@ fullstack_task
 **5.** You should now see `fullstack_task` listed under **Databases** in the left panel ✅
 
 > **Note:** Make sure the PostgreSQL server service is running before opening pgAdmin.
-> - **Windows** — Search *Services* → find `postgresql-x64-16` → click **Start**
+>
+> - **Windows** — Search _Services_ → find `postgresql-x64-16` → click **Start**
 > - **macOS** — Run `brew services start postgresql@16` in Terminal
 > - **Linux** — Run `sudo systemctl start postgresql` in Terminal
 
@@ -254,18 +257,24 @@ The migration automatically seeds an admin user:
 
 ### Auth Summary
 
-| Method | Endpoint | Description | Auth |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/signup` | Register a new user account | Public |
-| `POST` | `/api/auth/login` | Authenticate existing user | Public |
+| Method | Endpoint            | Description                                    | Auth   |
+| :----- | :------------------ | :--------------------------------------------- | :----- |
+| `POST` | `/api/auth/signup`  | Register a new user account                    | Public |
+| `POST` | `/api/auth/login`   | Authenticate existing user                     | Public |
 | `POST` | `/api/auth/refresh` | Obtain new access token & rotate refresh token | Public |
-| `POST` | `/api/auth/logout` | Revoke refresh token (`revoked_at = now()`) | Public |
+| `POST` | `/api/auth/logout`  | Revoke refresh token (`revoked_at = now()`)    | Public |
+
+### Profile Summary
+
+| Method | Endpoint          | Description                   | Auth                |
+| :----- | :---------------- | :---------------------------- | :------------------ |
+| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (any role) |
 
 ### Admin Summary
 
-| Method | Endpoint | Description | Auth |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/admin/users` | List all registered users (paginated) | `Bearer` (`admin` role) |
+| Method | Endpoint           | Description                           | Auth                    |
+| :----- | :----------------- | :------------------------------------ | :---------------------- |
+| `GET`  | `/api/admin/users` | List all registered users (paginated) | `Bearer` (`admin` role) |
 
 ---
 
@@ -276,6 +285,7 @@ The migration automatically seeds an admin user:
 Registers a new user account with strong password validation (requires uppercase, lowercase, digit, and special character).
 
 **Request Body:**
+
 ```json
 {
   "name": "Jane Doe",
@@ -285,6 +295,7 @@ Registers a new user account with strong password validation (requires uppercase
 ```
 
 **Success — `201 Created`:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -299,6 +310,7 @@ Registers a new user account with strong password validation (requires uppercase
 ```
 
 **Errors:**
+
 - `409 Conflict`: An account with this email address already exists.
 - `422 Unprocessable Entity`: Password fails strength requirements or min length.
 
@@ -306,9 +318,10 @@ Registers a new user account with strong password validation (requires uppercase
 
 #### 2. `POST /api/auth/login`
 
-Authenticates user credentials and issues new access and refresh tokens.
+Authenticates user credentials and issues new access and refresh tokens. Rate limited to **5 attempts per minute per IP** to prevent brute-force attacks.
 
 **Request Body:**
+
 ```json
 {
   "email": "jane@example.com",
@@ -317,6 +330,7 @@ Authenticates user credentials and issues new access and refresh tokens.
 ```
 
 **Success — `200 OK`:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -331,8 +345,10 @@ Authenticates user credentials and issues new access and refresh tokens.
 ```
 
 **Errors:**
+
 - `401 Unauthorized`: Invalid email or password.
 - `403 Forbidden`: Account is deactivated.
+- `429 Too Many Requests`: Exceeded 5 login attempts per minute per IP.
 
 ---
 
@@ -341,6 +357,7 @@ Authenticates user credentials and issues new access and refresh tokens.
 Exchanges an active refresh token for a new access token (15 mins) and a rotated refresh token (7 days).
 
 **Request Body:**
+
 ```json
 {
   "refresh_token": "b9f2c1d8e4..."
@@ -348,6 +365,7 @@ Exchanges an active refresh token for a new access token (15 mins) and a rotated
 ```
 
 **Success — `200 OK`:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -362,6 +380,7 @@ Exchanges an active refresh token for a new access token (15 mins) and a rotated
 ```
 
 **Errors:**
+
 - `401 Unauthorized`: Refresh token is invalid, expired, or revoked.
 
 ---
@@ -371,6 +390,7 @@ Exchanges an active refresh token for a new access token (15 mins) and a rotated
 Revokes the refresh token in PostgreSQL by updating its `revoked_at` timestamp.
 
 **Request Body:**
+
 ```json
 {
   "refresh_token": "c7a1b3d5e9..."
@@ -378,6 +398,7 @@ Revokes the refresh token in PostgreSQL by updating its `revoked_at` timestamp.
 ```
 
 **Success — `200 OK`:**
+
 ```json
 {
   "message": "Successfully logged out."
@@ -385,34 +406,63 @@ Revokes the refresh token in PostgreSQL by updating its `revoked_at` timestamp.
 ```
 
 **Errors:**
+
 - `400 Bad Request`: Refresh token is invalid or already revoked.
 
 ---
 
-#### 5. `GET /api/admin/users`
+#### 5. `GET /api/users/me`
 
-Lists all registered users in the system. **Strictly requires `admin` role.**
-
-**Query Parameters:**
-- `skip` *(int, optional, default: 0)*: Number of records to skip for pagination.
-- `limit` *(int, optional, default: 100, max: 500)*: Max number of records to return.
+Retrieves profile details of the currently authenticated user. **Protected route — accessible to any logged-in user regardless of role (`user` or `admin`).**
 
 **Headers:**
+
+```http
+Authorization: Bearer <access_token>
+```
+
+**Success — `200 OK`:**
+
+```json
+{
+  "id": 5,
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "role": "user",
+  "is_email_verified": false,
+  "is_active": true,
+  "created_at": "2026-10-09T15:27:00Z"
+}
+```
+
+**Errors:**
+
+- `401 Unauthorized`: Missing, invalid, or expired JWT access token.
+- `404 Not Found`: User profile not found.
+
+---
+
+#### 6. `GET /api/admin/users`
+
+Lists all registered non-admin users (`role = 'user'`). **Strictly requires `admin` role.**
+
+**Query Parameters:**
+
+- `skip` _(int, optional, default: 0)_: Number of records to skip for pagination.
+- `limit` _(int, optional, default: 100, max: 500)_: Max number of records to return.
+
+**Headers:**
+
 ```http
 Authorization: Bearer <admin_access_token>
 ```
 
 **Success — `200 OK`:**
+
 ```json
 {
-  "total": 2,
+  "total": 1,
   "users": [
-    {
-      "id": 1,
-      "name": "Aastha Shah",
-      "email": "aastha@gmail.com",
-      "role": "admin"
-    },
     {
       "id": 2,
       "name": "Jane Doe",
@@ -424,8 +474,9 @@ Authorization: Bearer <admin_access_token>
 ```
 
 **Errors:**
+
 - `401 Unauthorized`: Missing, invalid, or expired JWT access token.
-- `403 Forbidden`: Authenticated user does not have the `admin` role (e.g. `role: "user"`).
+- `403 Forbidden`: Authenticated user does not have the `admin` role.
 
 ---
 
