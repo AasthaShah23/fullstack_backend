@@ -2,10 +2,12 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api import api_router
+from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.rate_limiter import limiter
 
@@ -21,6 +23,15 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+)
+
+# CORS Middleware — enable cross-origin requests for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Attach rate limiter to app state and exception handler
