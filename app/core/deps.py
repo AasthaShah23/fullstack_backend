@@ -8,7 +8,7 @@ Core dependencies for FastAPI route handlers:
 from collections.abc import Generator
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
 
@@ -20,8 +20,8 @@ from app.models.users import User
 
 logger = get_logger(__name__)
 
-# OAuth2 Bearer scheme for token extraction & Swagger UI support
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+# HTTP Bearer scheme — provides a clean single "token" input box in Swagger UI
+http_bearer = HTTPBearer()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -34,9 +34,10 @@ def get_db() -> Generator[Session, None, None]:
 
 # Authentication dependency
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
     db: Session = Depends(get_db),
 ) -> User:
+    token = credentials.credentials
     try:
         payload = decode_access_token(token)
         user_id_str: str = payload.get("sub")
