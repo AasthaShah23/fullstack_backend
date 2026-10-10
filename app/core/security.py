@@ -15,12 +15,10 @@ _ph = PasswordHasher()
 
 # Password hashing
 def hash_password(plain_password: str) -> str:
-    """Hash a plain-text password using Argon2 and return the hash string."""
     return _ph.hash(plain_password)
 
 # Password verify
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Return True if plain_password matches the stored Argon2 hash."""
     try:
         return _ph.verify(hashed_password, plain_password)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
@@ -50,27 +48,23 @@ def decode_access_token(token: str) -> dict:
     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     return payload
 
-# Refresh Token — random opaque string stored as a hash in the DB
-def generate_refresh_token() -> str:
-    return secrets.token_hex(32) 
+# Opaque Token Generation & Hashing (Generic helpers for Refresh, Reset & Verification tokens)
+def generate_secure_token(nbytes: int = 32) -> str:
+    return secrets.token_hex(nbytes)
 
-# Refresh Token — hash for DB storage
-def hash_refresh_token(raw_token: str) -> str:
+# Return the SHA-256 hash string of *raw_token* for database storage.
+def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode()).hexdigest()
 
-# Password Reset Token — random opaque string
-def generate_reset_token() -> str:
-    return secrets.token_hex(32)
 
-# Password Reset Token — hash for DB storage
-def hash_reset_token(raw_token: str) -> str:
-    return hashlib.sha256(raw_token.encode()).hexdigest()
+# Semantic aliases for specific token contexts
+generate_refresh_token = generate_secure_token
+hash_refresh_token = hash_token
 
-# Email Verification Token — random opaque string
-def generate_verification_token() -> str:
-    return secrets.token_hex(32)
+generate_reset_token = generate_secure_token
+hash_reset_token = hash_token
 
-# Email Verification Token — hash for DB storage
-def hash_verification_token(raw_token: str) -> str:
-    return hashlib.sha256(raw_token.encode()).hexdigest()
+generate_verification_token = generate_secure_token
+hash_verification_token = hash_token
+
 

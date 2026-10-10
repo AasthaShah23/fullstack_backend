@@ -7,13 +7,9 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
-    generate_refresh_token,
-    generate_reset_token,
-    generate_verification_token,
+    generate_secure_token,
     hash_password,
-    hash_refresh_token,
-    hash_reset_token,
-    hash_verification_token,
+    hash_token,
     verify_password,
 )
 from app.features.auth.repository import (
@@ -96,8 +92,8 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     )
 
     # Generate + store refresh token
-    raw_refresh_token = generate_refresh_token()
-    token_hash = hash_refresh_token(raw_refresh_token)
+    raw_refresh_token = generate_secure_token()
+    token_hash = hash_token(raw_refresh_token)
 
     create_refresh_token(db, user_id=new_user.id, token_hash=token_hash)
     logger.info(
@@ -105,8 +101,8 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     )
 
     # Generate + store email verification token (24 hrs)
-    raw_verification_token = generate_verification_token()
-    verification_hash = hash_verification_token(raw_verification_token)
+    raw_verification_token = generate_secure_token()
+    verification_hash = hash_token(raw_verification_token)
     create_email_verification_token(
         db, user_id=new_user.id, token_hash=verification_hash, expires_in_hours=24
     )
@@ -164,8 +160,8 @@ def login_user(db: Session, payload: LoginRequest) -> TokenResponse:
     )
 
     # Generate + store refresh token
-    raw_refresh_token = generate_refresh_token()
-    token_hash = hash_refresh_token(raw_refresh_token)
+    raw_refresh_token = generate_secure_token()
+    token_hash = hash_token(raw_refresh_token)
     create_refresh_token(db, user_id=user.id, token_hash=token_hash)
 
     logger.info(
@@ -197,7 +193,7 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
         7. Generate a new JWT access token.
         8. Return new tokens + user profile.
     """
-    token_hash = hash_refresh_token(payload.refresh_token)
+    token_hash = hash_token(payload.refresh_token)
     token_record = get_hash_refresh_token(db, token_hash)
 
     if not token_record:
@@ -244,8 +240,8 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
     # Token Rotation: Revoke old token, create new token
     revoke_refresh_token(db, token_record)
 
-    new_raw_refresh_token = generate_refresh_token()
-    new_token_hash = hash_refresh_token(new_raw_refresh_token)
+    new_raw_refresh_token = generate_secure_token()
+    new_token_hash = hash_token(new_raw_refresh_token)
     create_refresh_token(db, user_id=user.id, token_hash=new_token_hash)
 
     new_access_token = create_access_token(
@@ -267,7 +263,7 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
 
 def logout_user(db: Session, payload: RefreshTokenRequest) -> LogoutResponse:
    
-    token_hash = hash_refresh_token(payload.refresh_token)
+    token_hash = hash_token(payload.refresh_token)
     token_record = get_hash_refresh_token(db, token_hash)
 
     if not token_record or token_record.revoked_at is not None:
@@ -294,8 +290,8 @@ def process_forgot_password(db: Session, payload: ForgotPasswordRequest) -> Forg
     user = get_user_by_email(db, email=payload.email)
 
     if user:
-        raw_reset_token = generate_reset_token()
-        token_hash = hash_reset_token(raw_reset_token)
+        raw_reset_token = generate_secure_token()
+        token_hash = hash_token(raw_reset_token)
 
         create_password_reset_token(db, user_id=user.id, token_hash=token_hash, expires_in_minutes=15)
 
@@ -330,7 +326,7 @@ def process_reset_password(db: Session, payload: ResetPasswordRequest) -> ResetP
         7. Mark reset token as used (`used_at = now()`).
         8. Revoke all active refresh tokens for the user for security.
     """
-    token_hash = hash_reset_token(payload.token)
+    token_hash = hash_token(payload.token)
     reset_record = get_password_reset_token_by_hash(db, token_hash)
 
     if not reset_record:
@@ -393,7 +389,7 @@ def process_verify_email(db: Session, token: str) -> VerifyEmailResponse:
         5. Mark user email as verified (`is_email_verified = True`).
         6. Invalidate verification token (`used_at = now()`).
     """
-    token_hash = hash_verification_token(token)
+    token_hash = hash_token(token)
     token_record = get_email_verification_token_by_hash(db, token_hash)
 
     if not token_record:
@@ -462,8 +458,8 @@ def process_resend_verification(db: Session, payload: ResendVerificationRequest)
             detail="Your account has been deactivated. Please contact support.",
         )
 
-    raw_verification_token = generate_verification_token()
-    verification_hash = hash_verification_token(raw_verification_token)
+    raw_verification_token = generate_secure_token()
+    verification_hash = hash_token(raw_verification_token)
     create_email_verification_token(
         db, user_id=user.id, token_hash=verification_hash, expires_in_hours=24
     )
