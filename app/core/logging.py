@@ -18,12 +18,8 @@ Log levels and what they mean here:
 import logging
 import sys
 from logging import Logger
-from typing import Optional
 
-
-_LOG_FORMAT = (
-    "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
-)
+_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -31,7 +27,7 @@ _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _configured = False
 
 
-def setup_logging(level: Optional[str] = None) -> None:
+def setup_logging(level: str | None = None) -> None:
 
     # Configure the root logger.
     global _configured
@@ -66,4 +62,3 @@ def setup_logging(level: Optional[str] = None) -> None:
 def get_logger(name: str) -> Logger:
     # Get a logger for the given module name.
     return logging.getLogger(name)
-

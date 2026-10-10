@@ -4,8 +4,8 @@ from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
-class RefreshToken(Base):
-    __tablename__ = "refresh_tokens"
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verifications"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
@@ -13,7 +13,7 @@ class RefreshToken(Base):
     )
     token_hash = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
@@ -21,5 +21,4 @@ class RefreshToken(Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-    user = relationship("User", backref="refresh_tokens")
+    user = relationship("User", backref="email_verifications")

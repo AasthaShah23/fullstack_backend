@@ -29,7 +29,8 @@ fullstack_backend/
 │   ├── versions/                     # Auto-generated + manual migration files
 │   │   ├── 958da1df6fcd_create_users_table.py
 │   │   ├── 645261d1df41_seed_new_user_as_admin_role.py
-│   │   └── 36f3bc6327cc_create_refresh_token_table.py
+│   │   ├── 36f3bc6327cc_create_refresh_token_table.py
+│   │   └── e465d1c1f4de_create_password_resets_table.py
 │   ├── env.py                        # Alembic runtime — wires SQLAlchemy models
 │   └── script.py.mako                # Migration file template
 │
@@ -38,25 +39,26 @@ fullstack_backend/
 │   │   ├── __init__.py               # Aggregates all feature routers → api_router
 │   │   └── auth/
 │   │       ├── __init__.py
-│   │       └── router.py             # POST /api/auth/signup
+│   │       └── router.py             # Auth routes (signup, login, refresh, logout, password reset)
 │   │
 │   ├── core/                         # Shared infrastructure — no business logic here
 │   │   ├── config.py                 # Settings loaded from .env (single source of truth)
 │   │   ├── database.py               # SQLAlchemy engine, SessionLocal, Base
 │   │   ├── deps.py                   # FastAPI dependencies (get_db session injector)
 │   │   ├── logging.py                # setup_logging() + get_logger() factory
-│   │   └── security.py              # hash_password() / verify_password() — Argon2
+│   │   ├── security.py              # hash_password() / verify_password() — Argon2
+│   │   └── security_middleware.py   # Role-based access control & rate limiting middleware
 │   │
 │   ├── features/                     # Feature-slice modules (co-locate by feature)
-│   │   └── auth/
-│   │       ├── repository.py         # All DB queries for auth (no business logic)
-│   │       ├── schema.py             # Pydantic request/response models for auth
-│   │       └── service.py            # Auth business logic (signup, future: login)
+│   │   ├── admin/                    # Admin specific handlers & router
+│   │   ├── auth/                     # Auth repository, schema, service
+│   │   └── users/                    # User profile /me router
 │   │
 │   ├── models/                       # SQLAlchemy ORM table definitions
-│   │   ├── __init__.py               # Exports User, RefreshToken
+│   │   ├── __init__.py               # Exports User, RefreshToken, PasswordResetToken
 │   │   ├── users.py                  # users table
 │   │   ├── refresh_tokens.py         # refresh_tokens table
+│   │   ├── password_resets.py        # password_resets table
 │   │   └── seed_admin.py            # Standalone script to seed the admin user
 │   │
 │   └── main.py                       # App entry point — logging bootstrap, middleware, routers
@@ -98,6 +100,17 @@ fullstack_backend/
 | `revoked_at` | `DateTime(tz)` | Nullable                            | Null if active, set on revocation |
 | `created_at` | `DateTime(tz)` | `server_default=now()`              | Issuance timestamp                |
 | `updated_at` | `DateTime(tz)` | `server_default=now()`, auto-update | Last modified timestamp           |
+
+### `password_resets`
+
+| Column       | Type           | Constraints                         | Description                       |
+| :----------- | :------------- | :---------------------------------- | :-------------------------------- |
+| `id`         | `Integer`      | PK, Indexed                         | Auto-increment identifier         |
+| `user_id`    | `Integer`      | FK → `users.id` CASCADE, `NOT NULL` | Owner reference                   |
+| `token_hash` | `String`       | Unique, Indexed, `NOT NULL`         | Hashed reset token                |
+| `expires_at` | `DateTime(tz)` | `NOT NULL`                          | 15-minute token expiry            |
+| `used_at`    | `DateTime(tz)` | Nullable                            | Null until single-use consumption |
+| `created_at` | `DateTime(tz)` | `server_default=now()`              | Request timestamp                 |
 
 ---
 
@@ -198,6 +211,7 @@ Now open `.env` and fill in your database credentials:
 ```env
 DATABASE_URL=postgresql://postgres:your_password@localhost:5432/fullstack_task
 LOG_LEVEL=DEBUG
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
 > **Replace** `your_password` with the password you set during PostgreSQL installation.  
@@ -257,18 +271,22 @@ The migration automatically seeds an admin user:
 
 ### Auth Summary
 
-| Method | Endpoint            | Description                                    | Auth   |
-| :----- | :------------------ | :--------------------------------------------- | :----- |
-| `POST` | `/api/auth/signup`  | Register a new user account                    | Public |
-| `POST` | `/api/auth/login`   | Authenticate existing user                     | Public |
-| `POST` | `/api/auth/refresh` | Obtain new access token & rotate refresh token | Public |
-| `POST` | `/api/auth/logout`  | Revoke refresh token (`revoked_at = now()`)    | Public |
+| Method     | Endpoint                        | Description                                         | Auth   |
+| :--------- | :------------------------------ | :-------------------------------------------------- | :----- |
+| `POST`     | `/api/auth/signup`              | Register a new user account                         | Public |
+| `POST`     | `/api/auth/login`               | Authenticate existing user (Rate limited 5/min)     | Public |
+| `POST`     | `/api/auth/refresh`             | Obtain new access token & rotate refresh token      | Public |
+| `POST`     | `/api/auth/logout`              | Revoke refresh token (`revoked_at = now()`)         | Public |
+| `POST`     | `/api/auth/forgot-password`     | Request password reset link (Rate limited 3/min)    | Public |
+| `POST`     | `/api/auth/reset-password`      | Reset password using token (Rate limited 5/min)     | Public |
+| `GET/POST` | `/api/auth/verify-email`        | Verify email using 24h verification token           | Public |
+| `POST`     | `/api/auth/resend-verification` | Resend email verification link (Rate limited 3/min) | Public |
 
 ### Profile Summary
 
-| Method | Endpoint          | Description                   | Auth                |
-| :----- | :---------------- | :---------------------------- | :------------------ |
-| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (any role) |
+| Method | Endpoint          | Description                   | Auth                               |
+| :----- | :---------------- | :---------------------------- | :--------------------------------- |
+| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (Requires verified email) |
 
 ### Admin Summary
 
@@ -480,6 +498,109 @@ Authorization: Bearer <admin_access_token>
 
 ---
 
+#### 7. `POST /api/auth/forgot-password`
+
+Generates a secure 15-minute single-use reset token and logs the mock password reset link to application logs. Always returns a generic success response to prevent user email enumeration. Rate limited to **3 attempts per minute per IP**.
+
+**Request Body:**
+
+```json
+{
+  "email": "jane@example.com"
+}
+```
+
+**Success — `200 OK`:**
+
+```json
+{
+  "message": "If the email is registered, password reset instructions have been sent."
+}
+```
+
+**Errors:**
+
+- `429 Too Many Requests`: Exceeded 3 requests per minute per IP.
+
+---
+
+#### 8. `POST /api/auth/reset-password`
+
+Validates the 15-minute reset token, enforces password strength rules, updates user's password using Argon2 hashing, consumes the token (`used_at = now()`), and revokes all active refresh tokens for security. Rate limited to **5 attempts per minute per IP**.
+
+**Request Body:**
+
+```json
+{
+  "token": "4f9a2b8c...",
+  "new_password": "N3w$ecurePass123"
+}
+```
+
+**Success — `200 OK`:**
+
+```json
+{
+  "message": "Password has been reset successfully. Please log in with your new password."
+}
+```
+
+**Errors:**
+
+- `400 Bad Request`: Token is invalid, expired, or already used.
+- `422 Unprocessable Entity`: Password fails strength requirements (uppercase, lowercase, digit, special character, min 8 chars).
+- `429 Too Many Requests`: Exceeded 5 requests per minute per IP.
+
+---
+
+#### 9. `GET /api/auth/verify-email?token=...` or `POST /api/auth/verify-email`
+
+Validates the 24-hour verification token received from the mock email link (`http://localhost:3000/verify-email?token=...`), sets `user.is_email_verified = True`, and marks the token as used (`used_at = now()`).
+
+**GET Query Parameter / POST Request Body:**
+
+`token`: Raw token string.
+
+**Success — `200 OK`:**
+
+```json
+{
+  "message": "Email has been successfully verified. You can now access all features."
+}
+```
+
+**Errors:**
+
+- `400 Bad Request`: Token is invalid, expired, or already used.
+
+---
+
+#### 10. `POST /api/auth/resend-verification`
+
+Generates a fresh 24-hour verification token and logs a new mock verification link for unverified users. Rate limited to **3 attempts per minute per IP**.
+
+**Request Body:**
+
+```json
+{
+  "email": "jane@example.com"
+}
+```
+
+**Success — `200 OK`:**
+
+```json
+{
+  "message": "If the email is registered and unverified, a new verification link has been sent."
+}
+```
+
+**Errors:**
+
+- `429 Too Many Requests`: Exceeded 3 requests per minute per IP.
+
+---
+
 ## 🛠 Common Development Commands
 
 | Action                     | Command                                                |
@@ -491,6 +612,38 @@ Authorization: Bearer <admin_access_token>
 | View migration history     | `alembic history --verbose`                            |
 | Create a new migration     | `alembic revision --autogenerate -m "describe change"` |
 | Seed admin user manually   | `python -m app.models.seed_admin`                      |
+| Run Linter (Ruff)          | `ruff check --fix .`                                   |
+| Format Codebase (Ruff)     | `ruff format .`                                        |
+
+---
+
+## 🧹 Code Formatting & Linting (Ruff)
+
+This project uses **[Ruff](https://docs.astral.sh/ruff/)** for fast Python linting and code formatting.
+
+### 1. Installation
+
+Ruff is included in `requirements.txt` and is installed automatically when setting up the environment:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Formatting Code
+
+To auto-format all Python files in the project to comply with PEP 8 and project style guidelines:
+
+```bash
+ruff format .
+```
+
+### 3. Running the Linter
+
+To check for code errors, unused imports, or style violations and automatically fix them:
+
+```bash
+ruff check --fix .
+```
 
 ---
 

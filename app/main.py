@@ -2,10 +2,12 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api import api_router
+from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.rate_limiter import limiter
 
@@ -23,6 +25,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# CORS Middleware — enable cross-origin requests for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Attach rate limiter to app state and exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -38,7 +49,7 @@ async def log_requests(request: Request, call_next) -> Response:
       - Incoming request (method + path + client IP)
       - Outgoing response (status code + duration in ms)
     """
-    request_id = str(uuid.uuid4())[:8]          # short 8-char ID for readability
+    request_id = str(uuid.uuid4())[:8]  # short 8-char ID for readability
     start_time = time.perf_counter()
 
     logger.info(
@@ -63,8 +74,10 @@ async def log_requests(request: Request, call_next) -> Response:
     response.headers["X-Request-ID"] = request_id
     return response
 
+
 # Routers
 app.include_router(api_router)
+
 
 @app.get("/", tags=["Health"])
 def health_check() -> dict:

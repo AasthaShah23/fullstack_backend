@@ -1,10 +1,12 @@
 # User & RefreshToken repository — all database interactions live here.
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.email_verifications import EmailVerificationToken
+from app.models.password_resets import PasswordResetToken
 from app.models.refresh_tokens import RefreshToken
 from app.models.users import User
 
@@ -14,6 +16,7 @@ logger = get_logger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 # User queries
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def get_user_by_email(db: Session, email: str) -> User | None:
     """Return the User row matching *email*, or None if not found."""
@@ -63,11 +66,10 @@ def create_user(
         raise
     return user
 
+
 # Refresh token queries
 def create_refresh_token(db: Session, *, user_id: int, token_hash: str) -> RefreshToken:
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expires_at = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     refresh_token = RefreshToken(
         user_id=user_id,
         token_hash=token_hash,
@@ -77,12 +79,10 @@ def create_refresh_token(db: Session, *, user_id: int, token_hash: str) -> Refre
         db.add(refresh_token)
         db.commit()
         db.refresh(refresh_token)
-        
+
     except Exception:
         db.rollback()
-        logger.error(
-            "Failed to store refresh token for user_id=%s", user_id, exc_info=True
-        )
+        logger.error("Failed to store refresh token for user_id=%s", user_id, exc_info=True)
         raise
     return refresh_token
 
@@ -100,13 +100,175 @@ def get_hash_refresh_token(db: Session, token_hash: str) -> RefreshToken | None:
 def revoke_refresh_token(db: Session, refresh_token: RefreshToken) -> None:
     """Mark a refresh token record as revoked by setting revoked_at to current timestamp."""
     try:
-        refresh_token.revoked_at = datetime.now(timezone.utc)
+        refresh_token.revoked_at = datetime.now(UTC)
         db.commit()
         db.refresh(refresh_token)
-        logger.debug("Revoked refresh token id=%s for user_id=%s", refresh_token.id, refresh_token.user_id)
+        logger.debug(
+            "Revoked refresh token id=%s for user_id=%s", refresh_token.id, refresh_token.user_id
+        )
+    except Exception:
+        db.rollback()
+        logger.error("Failed to revoke refresh token id=%s", refresh_token.id, exc_info=True)
+        raise
+
+
+# Password Reset queries
+def create_password_reset_token(
+    db: Session,
+    *,
+    user_id: int,
+    token_hash: str,
+    expires_in_minutes: int = 15,
+) -> PasswordResetToken:
+    """Insert a new PasswordResetToken row into DB."""
+    expires_at = datetime.now(UTC) + timedelta(minutes=expires_in_minutes)
+    reset_token = PasswordResetToken(
+        user_id=user_id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+    try:
+        db.add(reset_token)
+        db.commit()
+        db.refresh(reset_token)
+        logger.debug(
+            "Password reset token stored — user_id=%s  expires_at=%s",
+            user_id,
+            expires_at.isoformat(),
+        )
+    except Exception:
+        db.rollback()
+        logger.error("Failed to store password reset token for user_id=%s", user_id, exc_info=True)
+        raise
+    return reset_token
+
+
+def get_password_reset_token_by_hash(db: Session, token_hash: str) -> PasswordResetToken | None:
+    """Return the PasswordResetToken row matching *token_hash*, or None if not found."""
+    token = db.query(PasswordResetToken).filter(PasswordResetToken.token_hash == token_hash).first()
+    if token:
+        logger.debug("Found password reset token: id=%s  user_id=%s", token.id, token.user_id)
+    else:
+        logger.debug("No password reset token found for hash")
+    return token
+
+
+def mark_password_reset_token_used(db: Session, reset_token: PasswordResetToken) -> None:
+    """Mark a password reset token as used."""
+    try:
+        reset_token.used_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(reset_token)
+        logger.debug("Marked password reset token id=%s as used", reset_token.id)
     except Exception:
         db.rollback()
         logger.error(
-            "Failed to revoke refresh token id=%s", refresh_token.id, exc_info=True
+            "Failed to mark password reset token id=%s as used", reset_token.id, exc_info=True
         )
+        raise
+
+
+def update_user_password(db: Session, user: User, new_hashed_password: str) -> None:
+    """Update user password with new Argon2 hash."""
+    try:
+        user.password = new_hashed_password
+        db.commit()
+        db.refresh(user)
+        logger.debug("Updated password for user_id=%s", user.id)
+    except Exception:
+        db.rollback()
+        logger.error("Failed to update password for user_id=%s", user.id, exc_info=True)
+        raise
+
+
+def revoke_all_user_refresh_tokens(db: Session, user_id: int) -> None:
+    """Revoke all active refresh tokens for a user (e.g. after password reset)."""
+    try:
+        now = datetime.now(UTC)
+        db.query(RefreshToken).filter(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+        ).update({"revoked_at": now})
+        db.commit()
+        logger.debug("Revoked all active refresh tokens for user_id=%s", user_id)
+    except Exception:
+        db.rollback()
+        logger.error("Failed to revoke all refresh tokens for user_id=%s", user_id, exc_info=True)
+        raise
+
+
+# Email Verification queries
+def create_email_verification_token(
+    db: Session,
+    *,
+    user_id: int,
+    token_hash: str,
+    expires_in_hours: int = 24,
+) -> EmailVerificationToken:
+    """Insert a new EmailVerificationToken row into DB."""
+    expires_at = datetime.now(UTC) + timedelta(hours=expires_in_hours)
+    verification_token = EmailVerificationToken(
+        user_id=user_id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+    try:
+        db.add(verification_token)
+        db.commit()
+        db.refresh(verification_token)
+        logger.debug(
+            "Email verification token stored — user_id=%s  expires_at=%s",
+            user_id,
+            expires_at.isoformat(),
+        )
+    except Exception:
+        db.rollback()
+        logger.error(
+            "Failed to store email verification token for user_id=%s", user_id, exc_info=True
+        )
+        raise
+    return verification_token
+
+
+def get_email_verification_token_by_hash(
+    db: Session, token_hash: str
+) -> EmailVerificationToken | None:
+    """Return the EmailVerificationToken row matching *token_hash*, or None if not found."""
+    token = (
+        db.query(EmailVerificationToken)
+        .filter(EmailVerificationToken.token_hash == token_hash)
+        .first()
+    )
+    if token:
+        logger.debug("Found email verification token: id=%s  user_id=%s", token.id, token.user_id)
+    else:
+        logger.debug("No email verification token found for hash")
+    return token
+
+
+def mark_email_verification_token_used(db: Session, token_obj: EmailVerificationToken) -> None:
+    """Mark an email verification token as used."""
+    try:
+        token_obj.used_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(token_obj)
+        logger.debug("Marked email verification token id=%s as used", token_obj.id)
+    except Exception:
+        db.rollback()
+        logger.error(
+            "Failed to mark email verification token id=%s as used", token_obj.id, exc_info=True
+        )
+        raise
+
+
+def mark_user_email_as_verified(db: Session, user: User) -> None:
+    """Update user's is_email_verified flag to True."""
+    try:
+        user.is_email_verified = True
+        db.commit()
+        db.refresh(user)
+        logger.debug("Marked email as verified for user_id=%s", user.id)
+    except Exception:
+        db.rollback()
+        logger.error("Failed to mark email as verified for user_id=%s", user.id, exc_info=True)
         raise

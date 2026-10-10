@@ -25,12 +25,13 @@ http_bearer = HTTPBearer()
 
 
 def get_db() -> Generator[Session, None, None]:
- 
+
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 # Authentication dependency
 def get_current_user(
@@ -50,13 +51,13 @@ def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         user_id = int(user_id_str)
-    except (JWTError, ValueError):
+    except (JWTError, ValueError) as err:
         logger.warning("Failed to decode or parse JWT access token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="You are not authenticated. Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from err
 
     user = get_user_by_id(db, user_id=user_id)
     if not user:
@@ -75,6 +76,7 @@ def get_current_user(
         )
 
     return user
+
 
 # Role-based authorization dependency
 def require_role(required_role: str):
@@ -98,3 +100,18 @@ def require_role(required_role: str):
 
 # Convenient pre-configured dependency for admin-only routes
 require_admin = require_role("admin")
+
+
+# Email verification dependency for protected routes
+def require_verified_user(current_user: User = Depends(get_current_user)) -> User:
+
+    if not current_user.is_email_verified:
+        logger.warning(
+            "Access denied — unverified user_id=%s attempted to access protected route",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address to view profile details.",
+        )
+    return current_user

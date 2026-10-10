@@ -10,12 +10,15 @@ ADMIN_USER_DATA = {
     "is_active": True,
 }
 
+
 def seed_users():
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.email == ADMIN_USER_DATA["email"]).first()
         if user:
-            print(f"User with email '{ADMIN_USER_DATA['email']}' already exists. Updating details...")
+            print(
+                f"User with email '{ADMIN_USER_DATA['email']}' already exists. Updating details..."
+            )
             for key, value in ADMIN_USER_DATA.items():
                 setattr(user, key, value)
             db.commit()

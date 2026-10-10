@@ -24,4 +24,3 @@ def get_current_user_profile(db: Session, current_user: User) -> UserProfileResp
 
     logger.info("User profile retrieved successfully — user_id=%s  email=%s", user.id, user.email)
     return UserProfileResponse.model_validate(user)
-

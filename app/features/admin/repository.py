@@ -11,4 +11,3 @@ def get_all_users(db: Session, *, skip: int = 0, limit: int = 100) -> tuple[list
     total = base_query.count()
     users = base_query.order_by(User.id.asc()).offset(skip).limit(limit).all()
     return users, total
-
