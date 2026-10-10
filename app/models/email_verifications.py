@@ -8,7 +8,9 @@ class EmailVerificationToken(Base):
     __tablename__ = "email_verifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     token_hash = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
@@ -20,4 +22,3 @@ class EmailVerificationToken(Base):
         nullable=False,
     )
     user = relationship("User", backref="email_verifications")
-

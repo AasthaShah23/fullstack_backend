@@ -49,7 +49,7 @@ async def log_requests(request: Request, call_next) -> Response:
       - Incoming request (method + path + client IP)
       - Outgoing response (status code + duration in ms)
     """
-    request_id = str(uuid.uuid4())[:8]          # short 8-char ID for readability
+    request_id = str(uuid.uuid4())[:8]  # short 8-char ID for readability
     start_time = time.perf_counter()
 
     logger.info(
@@ -74,8 +74,10 @@ async def log_requests(request: Request, call_next) -> Response:
     response.headers["X-Request-ID"] = request_id
     return response
 
+
 # Routers
 app.include_router(api_router)
+
 
 @app.get("/", tags=["Health"])
 def health_check() -> dict:

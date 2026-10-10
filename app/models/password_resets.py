@@ -8,7 +8,9 @@ class PasswordResetToken(Base):
     __tablename__ = "password_resets"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     token_hash = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
@@ -21,4 +23,3 @@ class PasswordResetToken(Base):
     )
 
     user = relationship("User", backref="password_resets")
-

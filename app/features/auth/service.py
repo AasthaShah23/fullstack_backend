@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -47,6 +47,7 @@ from app.features.auth.schema import (
 
 logger = get_logger(__name__)
 
+
 def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     """
     Register a new user account and return JWT tokens.
@@ -63,9 +64,7 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     # Duplicate email check
     existing_user = get_user_by_email(db, email=payload.email)
     if existing_user:
-        logger.warning(
-            "Email already registered: email=%s", payload.email
-        )
+        logger.warning("Email already registered: email=%s", payload.email)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email address already exists.",
@@ -80,9 +79,7 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
         email=payload.email,
         hashed_password=hashed_pw,
     )
-    logger.info(
-        "User created successfully — user_id=%s  email=%s", new_user.id, new_user.email
-    )
+    logger.info("User created successfully — user_id=%s  email=%s", new_user.id, new_user.email)
 
     # Generate JWT access token
     access_token = create_access_token(
@@ -96,9 +93,7 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     token_hash = hash_token(raw_refresh_token)
 
     create_refresh_token(db, user_id=new_user.id, token_hash=token_hash)
-    logger.info(
-        "Tokens issued after signup — user_id=%s", new_user.id
-    )
+    logger.info("Tokens issued after signup — user_id=%s", new_user.id)
 
     # Generate + store email verification token (24 hrs)
     raw_verification_token = generate_secure_token()
@@ -124,7 +119,7 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     # Return response
     return TokenResponse(
         access_token=access_token,
-        refresh_token=raw_refresh_token,   # raw token → goes to client
+        refresh_token=raw_refresh_token,  # raw token → goes to client
         user=UserResponse.model_validate(new_user),
     )
 
@@ -133,9 +128,7 @@ def login_user(db: Session, payload: LoginRequest) -> TokenResponse:
     user = get_user_by_email(db, email=payload.email)
 
     if not user or not verify_password(payload.password, user.password):
-        logger.warning(
-            "Login failed — invalid credentials for email=%s", payload.email
-        )
+        logger.warning("Login failed — invalid credentials for email=%s", payload.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -214,10 +207,10 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
             detail="Invalid or expired refresh token.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = token_record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
 
     if expires_at < now:
         logger.warning("Refresh failed — token id=%s has expired", token_record.id)
@@ -250,9 +243,7 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
         role=user.role,
     )
 
-    logger.info(
-        "Token refresh successful — user_id=%s  email=%s", user.id, user.email
-    )
+    logger.info("Token refresh successful — user_id=%s  email=%s", user.id, user.email)
 
     return TokenResponse(
         access_token=new_access_token,
@@ -262,7 +253,7 @@ def refresh_access_token(db: Session, payload: RefreshTokenRequest) -> TokenResp
 
 
 def logout_user(db: Session, payload: RefreshTokenRequest) -> LogoutResponse:
-   
+
     token_hash = hash_token(payload.refresh_token)
     token_record = get_hash_refresh_token(db, token_hash)
 
@@ -293,7 +284,9 @@ def process_forgot_password(db: Session, payload: ForgotPasswordRequest) -> Forg
         raw_reset_token = generate_secure_token()
         token_hash = hash_token(raw_reset_token)
 
-        create_password_reset_token(db, user_id=user.id, token_hash=token_hash, expires_in_minutes=15)
+        create_password_reset_token(
+            db, user_id=user.id, token_hash=token_hash, expires_in_minutes=15
+        )
 
         # Mock Email Service: Log the password reset link
         mock_reset_link = f"http://localhost:3000/reset-password?token={raw_reset_token}"
@@ -343,10 +336,10 @@ def process_reset_password(db: Session, payload: ResetPasswordRequest) -> ResetP
             detail="Invalid or expired password reset token.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = reset_record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
 
     if expires_at < now:
         logger.warning("Password reset failed — token id=%s expired", reset_record.id)
@@ -357,7 +350,9 @@ def process_reset_password(db: Session, payload: ResetPasswordRequest) -> ResetP
 
     user = get_user_by_id(db, reset_record.user_id)
     if not user or not user.is_active:
-        logger.warning("Password reset failed — user_id=%s inactive or not found", reset_record.user_id)
+        logger.warning(
+            "Password reset failed — user_id=%s inactive or not found", reset_record.user_id
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User account is inactive or no longer exists.",
@@ -373,7 +368,9 @@ def process_reset_password(db: Session, payload: ResetPasswordRequest) -> ResetP
     # Security: Revoke all existing sessions / refresh tokens
     revoke_all_user_refresh_tokens(db, user.id)
 
-    logger.info("Password reset completed successfully for user_id=%s email=%s", user.id, user.email)
+    logger.info(
+        "Password reset completed successfully for user_id=%s email=%s", user.id, user.email
+    )
     return ResetPasswordResponse()
 
 
@@ -406,10 +403,10 @@ def process_verify_email(db: Session, token: str) -> VerifyEmailResponse:
             detail="Invalid or expired verification token.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = token_record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
 
     if expires_at < now:
         logger.warning("Email verification failed — token id=%s expired", token_record.id)
@@ -420,7 +417,9 @@ def process_verify_email(db: Session, token: str) -> VerifyEmailResponse:
 
     user = get_user_by_id(db, token_record.user_id)
     if not user or not user.is_active:
-        logger.warning("Email verification failed — user_id=%s inactive or not found", token_record.user_id)
+        logger.warning(
+            "Email verification failed — user_id=%s inactive or not found", token_record.user_id
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User account is inactive or no longer exists.",
@@ -432,27 +431,38 @@ def process_verify_email(db: Session, token: str) -> VerifyEmailResponse:
     logger.info("Email verified successfully for user_id=%s email=%s", user.id, user.email)
     return VerifyEmailResponse()
 
+
 # resend verification email
-def process_resend_verification(db: Session, payload: ResendVerificationRequest) -> ResendVerificationResponse:
+def process_resend_verification(
+    db: Session, payload: ResendVerificationRequest
+) -> ResendVerificationResponse:
     clean_email = payload.email.lower().strip()
     user = get_user_by_email(db, email=clean_email)
 
     if not user:
-        logger.info("Resend verification skipped — email %s is not registered in database", clean_email)
+        logger.info(
+            "Resend verification skipped — email %s is not registered in database", clean_email
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No account found with that email address.",
         )
 
     if user.is_email_verified:
-        logger.info("Resend verification skipped — user_id=%s email=%s is ALREADY VERIFIED", user.id, user.email)
+        logger.info(
+            "Resend verification skipped — user_id=%s email=%s is ALREADY VERIFIED",
+            user.id,
+            user.email,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email address is already verified.",
         )
 
     if not user.is_active:
-        logger.warning("Resend verification skipped — user_id=%s email=%s is deactivated", user.id, user.email)
+        logger.warning(
+            "Resend verification skipped — user_id=%s email=%s is deactivated", user.id, user.email
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account has been deactivated. Please contact support.",
@@ -478,4 +488,3 @@ def process_resend_verification(db: Session, payload: ResendVerificationRequest)
     )
 
     return ResendVerificationResponse()
-

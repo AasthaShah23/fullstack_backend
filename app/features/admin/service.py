@@ -15,4 +15,3 @@ def list_users(db: Session, *, skip: int = 0, limit: int = 100) -> UserListRespo
         total=total,
         users=[UserResponse.model_validate(user) for user in users],
     )
-

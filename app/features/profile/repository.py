@@ -18,4 +18,3 @@ def get_user_profile_by_id(db: Session, user_id: int) -> User | None:
     else:
         logger.debug("DB query — get_user_profile_by_id: user_id=%s not found", user_id)
     return user
-

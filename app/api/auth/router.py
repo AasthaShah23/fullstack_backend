@@ -16,7 +16,6 @@ from app.features.auth.schema import (
     ResetPasswordResponse,
     SignUpRequest,
     TokenResponse,
-    VerifyEmailRequest,
     VerifyEmailResponse,
 )
 from app.features.auth.service import (
@@ -33,6 +32,7 @@ from app.features.auth.service import (
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
 
 # POST /api/auth/signup
 @router.post(
@@ -59,15 +59,14 @@ def signup(
     )
     return token_response
 
+
 # POST /api/auth/login
 @router.post(
     "/login",
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Login with email and password",
-    description=(
-        "Authenticates an existing user."
-    ),
+    description=("Authenticates an existing user."),
 )
 @limiter.limit("5/minute")
 def login(
@@ -77,6 +76,7 @@ def login(
 ) -> TokenResponse:
     token_response = login_user(db, payload)
     return token_response
+
 
 # POST /api/auth/refresh
 @router.post(
@@ -95,15 +95,14 @@ def refresh(
     token_response = refresh_access_token(db, payload)
     return token_response
 
+
 # POST /api/auth/logout
 @router.post(
     "/logout",
     response_model=LogoutResponse,
     status_code=status.HTTP_200_OK,
     summary="Logout user",
-    description=(
-        "Revokes the provided refresh token by updating its `revoked_at` timestamp."
-    ),
+    description=("Revokes the provided refresh token by updating its `revoked_at` timestamp."),
 )
 def logout(
     payload: RefreshTokenRequest,
@@ -171,6 +170,7 @@ def verify_email_get(
 ) -> VerifyEmailResponse:
     logger.info("Email verification GET request received")
     return process_verify_email(db, token)
+
 
 # POST /api/auth/resend-verification
 @router.post(

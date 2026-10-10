@@ -103,14 +103,14 @@ fullstack_backend/
 
 ### `password_resets`
 
-| Column       | Type           | Constraints                         | Description                        |
-| :----------- | :------------- | :---------------------------------- | :--------------------------------- |
-| `id`         | `Integer`      | PK, Indexed                         | Auto-increment identifier          |
-| `user_id`    | `Integer`      | FK → `users.id` CASCADE, `NOT NULL` | Owner reference                    |
-| `token_hash` | `String`       | Unique, Indexed, `NOT NULL`         | Hashed reset token                 |
-| `expires_at` | `DateTime(tz)` | `NOT NULL`                          | 15-minute token expiry             |
-| `used_at`    | `DateTime(tz)` | Nullable                            | Null until single-use consumption  |
-| `created_at` | `DateTime(tz)` | `server_default=now()`              | Request timestamp                  |
+| Column       | Type           | Constraints                         | Description                       |
+| :----------- | :------------- | :---------------------------------- | :-------------------------------- |
+| `id`         | `Integer`      | PK, Indexed                         | Auto-increment identifier         |
+| `user_id`    | `Integer`      | FK → `users.id` CASCADE, `NOT NULL` | Owner reference                   |
+| `token_hash` | `String`       | Unique, Indexed, `NOT NULL`         | Hashed reset token                |
+| `expires_at` | `DateTime(tz)` | `NOT NULL`                          | 15-minute token expiry            |
+| `used_at`    | `DateTime(tz)` | Nullable                            | Null until single-use consumption |
+| `created_at` | `DateTime(tz)` | `server_default=now()`              | Request timestamp                 |
 
 ---
 
@@ -271,22 +271,22 @@ The migration automatically seeds an admin user:
 
 ### Auth Summary
 
-| Method | Endpoint                    | Description                                    | Auth   |
-| :----- | :-------------------------- | :--------------------------------------------- | :----- |
-| `POST` | `/api/auth/signup`          | Register a new user account                    | Public |
-| `POST` | `/api/auth/login`           | Authenticate existing user (Rate limited 5/min)| Public |
-| `POST` | `/api/auth/refresh`         | Obtain new access token & rotate refresh token | Public |
-| `POST` | `/api/auth/logout`          | Revoke refresh token (`revoked_at = now()`)    | Public |
-| `POST` | `/api/auth/forgot-password`     | Request password reset link (Rate limited 3/min)| Public |
-| `POST` | `/api/auth/reset-password`      | Reset password using token (Rate limited 5/min) | Public |
-| `GET/POST` | `/api/auth/verify-email`   | Verify email using 24h verification token      | Public |
-| `POST` | `/api/auth/resend-verification` | Resend email verification link (Rate limited 3/min)| Public |
+| Method     | Endpoint                        | Description                                         | Auth   |
+| :--------- | :------------------------------ | :-------------------------------------------------- | :----- |
+| `POST`     | `/api/auth/signup`              | Register a new user account                         | Public |
+| `POST`     | `/api/auth/login`               | Authenticate existing user (Rate limited 5/min)     | Public |
+| `POST`     | `/api/auth/refresh`             | Obtain new access token & rotate refresh token      | Public |
+| `POST`     | `/api/auth/logout`              | Revoke refresh token (`revoked_at = now()`)         | Public |
+| `POST`     | `/api/auth/forgot-password`     | Request password reset link (Rate limited 3/min)    | Public |
+| `POST`     | `/api/auth/reset-password`      | Reset password using token (Rate limited 5/min)     | Public |
+| `GET/POST` | `/api/auth/verify-email`        | Verify email using 24h verification token           | Public |
+| `POST`     | `/api/auth/resend-verification` | Resend email verification link (Rate limited 3/min) | Public |
 
 ### Profile Summary
 
-| Method | Endpoint        | Description                   | Auth                            |
-| :----- | :-------------- | :---------------------------- | :------------------------------ |
-| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (Requires verified email)|
+| Method | Endpoint          | Description                   | Auth                               |
+| :----- | :---------------- | :---------------------------- | :--------------------------------- |
+| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (Requires verified email) |
 
 ### Admin Summary
 
@@ -612,6 +612,38 @@ Generates a fresh 24-hour verification token and logs a new mock verification li
 | View migration history     | `alembic history --verbose`                            |
 | Create a new migration     | `alembic revision --autogenerate -m "describe change"` |
 | Seed admin user manually   | `python -m app.models.seed_admin`                      |
+| Run Linter (Ruff)          | `ruff check --fix .`                                   |
+| Format Codebase (Ruff)     | `ruff format .`                                        |
+
+---
+
+## 🧹 Code Formatting & Linting (Ruff)
+
+This project uses **[Ruff](https://docs.astral.sh/ruff/)** for fast Python linting and code formatting.
+
+### 1. Installation
+
+Ruff is included in `requirements.txt` and is installed automatically when setting up the environment:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Formatting Code
+
+To auto-format all Python files in the project to comply with PEP 8 and project style guidelines:
+
+```bash
+ruff format .
+```
+
+### 3. Running the Linter
+
+To check for code errors, unused imports, or style violations and automatically fix them:
+
+```bash
+ruff check --fix .
+```
 
 ---
 

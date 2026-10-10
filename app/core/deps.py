@@ -25,12 +25,13 @@ http_bearer = HTTPBearer()
 
 
 def get_db() -> Generator[Session, None, None]:
- 
+
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 # Authentication dependency
 def get_current_user(
@@ -50,13 +51,13 @@ def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         user_id = int(user_id_str)
-    except (JWTError, ValueError):
+    except (JWTError, ValueError) as err:
         logger.warning("Failed to decode or parse JWT access token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="You are not authenticated. Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from err
 
     user = get_user_by_id(db, user_id=user_id)
     if not user:
@@ -75,6 +76,7 @@ def get_current_user(
         )
 
     return user
+
 
 # Role-based authorization dependency
 def require_role(required_role: str):
@@ -113,4 +115,3 @@ def require_verified_user(current_user: User = Depends(get_current_user)) -> Use
             detail="Please verify your email address to view profile details.",
         )
     return current_user
-

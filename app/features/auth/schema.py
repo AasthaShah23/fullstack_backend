@@ -1,4 +1,5 @@
 import re
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -37,6 +38,7 @@ class SignUpRequest(BaseModel):
             raise ValueError("Password must contain at least one special character")
         return v
 
+
 # Request schema for the login route
 class LoginRequest(BaseModel):
     email: EmailStr = Field(
@@ -51,6 +53,7 @@ class LoginRequest(BaseModel):
         examples=["Str0ng!Pass"],
         description="Account password.",
     )
+
 
 # Request schema for token refresh
 class RefreshTokenRequest(BaseModel):
@@ -103,7 +106,7 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     role: str
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -126,7 +129,9 @@ class ForgotPasswordResponse(BaseModel):
 
 # Response schema for reset password route
 class ResetPasswordResponse(BaseModel):
-    message: str = "Password has been successfully reset. You can now log in with your new password."
+    message: str = (
+        "Password has been successfully reset. You can now log in with your new password."
+    )
 
 
 # Request & Response schemas for Email Verification
@@ -151,4 +156,3 @@ class ResendVerificationRequest(BaseModel):
 
 class ResendVerificationResponse(BaseModel):
     message: str = "A verification link has been sent to your email address."
-

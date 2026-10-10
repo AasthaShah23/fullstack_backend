@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
 
+
 @router.get(
     "/me",
     response_model=UserProfileResponse,
@@ -29,4 +30,3 @@ def get_me(
     current_user: User = Depends(require_verified_user),
 ) -> UserProfileResponse:
     return get_current_user_profile(db, current_user=current_user)
-
