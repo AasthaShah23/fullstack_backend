@@ -1,4 +1,4 @@
-# TongGarden Backend API
+# AuthApp Backend API
 
 A production-ready REST API built with **FastAPI**, **SQLAlchemy 2**, and **PostgreSQL** — structured for scalability, testability, and clean code.
 
@@ -612,6 +612,7 @@ Generates a fresh 24-hour verification token and logs a new mock verification li
 | View migration history     | `alembic history --verbose`                            |
 | Create a new migration     | `alembic revision --autogenerate -m "describe change"` |
 | Seed admin user manually   | `python -m app.models.seed_admin`                      |
+| Run Unit/Integration Tests | `pytest -v`                                            |
 | Run Linter (Ruff)          | `ruff check --fix .`                                   |
 | Format Codebase (Ruff)     | `ruff format .`                                        |
 
