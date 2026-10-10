@@ -3,25 +3,32 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
     generate_reset_token,
+    generate_verification_token,
     hash_password,
     hash_refresh_token,
     hash_reset_token,
+    hash_verification_token,
     verify_password,
 )
 from app.features.auth.repository import (
+    create_email_verification_token,
     create_password_reset_token,
     create_refresh_token,
     create_user,
+    get_email_verification_token_by_hash,
     get_hash_refresh_token,
+    get_password_reset_token_by_hash,
     get_user_by_email,
     get_user_by_id,
+    mark_email_verification_token_used,
     mark_password_reset_token_used,
-    get_password_reset_token_by_hash,
+    mark_user_email_as_verified,
     revoke_all_user_refresh_tokens,
     revoke_refresh_token,
     update_user_password,
@@ -32,11 +39,14 @@ from app.features.auth.schema import (
     LoginRequest,
     LogoutResponse,
     RefreshTokenRequest,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
     SignUpRequest,
     TokenResponse,
     UserResponse,
+    VerifyEmailResponse,
 )
 
 logger = get_logger(__name__)
@@ -92,6 +102,27 @@ def signup_user(db: Session, payload: SignUpRequest) -> TokenResponse:
     create_refresh_token(db, user_id=new_user.id, token_hash=token_hash)
     logger.info(
         "Tokens issued after signup — user_id=%s", new_user.id
+    )
+
+    # Generate + store email verification token (24 hrs)
+    raw_verification_token = generate_verification_token()
+    verification_hash = hash_verification_token(raw_verification_token)
+    create_email_verification_token(
+        db, user_id=new_user.id, token_hash=verification_hash, expires_in_hours=24
+    )
+
+    # Mock Email Service: Log verification link
+    mock_verification_link = f"{settings.FRONTEND_URL}/verify-email?token={raw_verification_token}"
+    logger.info(
+        "\n========================================================================\n"
+        "MOCK EMAIL SENT TO: %s\n"
+        "SUBJECT: Verify Your Email Address\n"
+        "LINK: %s\n"
+        "TOKEN (RAW): %s\n"
+        "========================================================================",
+        new_user.email,
+        mock_verification_link,
+        raw_verification_token,
     )
 
     # Return response
@@ -259,13 +290,7 @@ def logout_user(db: Session, payload: RefreshTokenRequest) -> LogoutResponse:
 
 
 def process_forgot_password(db: Session, payload: ForgotPasswordRequest) -> ForgotPasswordResponse:
-    """
-    Process a forgot-password request.
 
-    Generates a password reset token, persists its SHA-256 hash in DB,
-    and logs the mock email link (no real email service required).
-    Returns a generic success message to prevent user enumeration.
-    """
     user = get_user_by_email(db, email=payload.email)
 
     if user:
@@ -354,3 +379,107 @@ def process_reset_password(db: Session, payload: ResetPasswordRequest) -> ResetP
 
     logger.info("Password reset completed successfully for user_id=%s email=%s", user.id, user.email)
     return ResetPasswordResponse()
+
+
+def process_verify_email(db: Session, token: str) -> VerifyEmailResponse:
+    """
+    Process email verification using token.
+
+    Steps:
+        1. Hash the incoming raw token.
+        2. Query DB for matching verification token record.
+        3. Validate token exists, is not used, and is not expired.
+        4. Validate user exists and is active.
+        5. Mark user email as verified (`is_email_verified = True`).
+        6. Invalidate verification token (`used_at = now()`).
+    """
+    token_hash = hash_verification_token(token)
+    token_record = get_email_verification_token_by_hash(db, token_hash)
+
+    if not token_record:
+        logger.warning("Email verification failed — token hash not found in DB")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token.",
+        )
+
+    if token_record.used_at is not None:
+        logger.warning("Email verification failed — token id=%s already used", token_record.id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token.",
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = token_record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < now:
+        logger.warning("Email verification failed — token id=%s expired", token_record.id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token.",
+        )
+
+    user = get_user_by_id(db, token_record.user_id)
+    if not user or not user.is_active:
+        logger.warning("Email verification failed — user_id=%s inactive or not found", token_record.user_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User account is inactive or no longer exists.",
+        )
+
+    mark_user_email_as_verified(db, user)
+    mark_email_verification_token_used(db, token_record)
+
+    logger.info("Email verified successfully for user_id=%s email=%s", user.id, user.email)
+    return VerifyEmailResponse()
+
+# resend verification email
+def process_resend_verification(db: Session, payload: ResendVerificationRequest) -> ResendVerificationResponse:
+    clean_email = payload.email.lower().strip()
+    user = get_user_by_email(db, email=clean_email)
+
+    if not user:
+        logger.info("Resend verification skipped — email %s is not registered in database", clean_email)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with that email address.",
+        )
+
+    if user.is_email_verified:
+        logger.info("Resend verification skipped — user_id=%s email=%s is ALREADY VERIFIED", user.id, user.email)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address is already verified.",
+        )
+
+    if not user.is_active:
+        logger.warning("Resend verification skipped — user_id=%s email=%s is deactivated", user.id, user.email)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated. Please contact support.",
+        )
+
+    raw_verification_token = generate_verification_token()
+    verification_hash = hash_verification_token(raw_verification_token)
+    create_email_verification_token(
+        db, user_id=user.id, token_hash=verification_hash, expires_in_hours=24
+    )
+
+    mock_verification_link = f"{settings.FRONTEND_URL}/verify-email?token={raw_verification_token}"
+    logger.info(
+        "\n========================================================================\n"
+        "MOCK EMAIL SENT TO: %s\n"
+        "SUBJECT: Resend Verification Email Link\n"
+        "LINK: %s\n"
+        "TOKEN (RAW): %s\n"
+        "========================================================================",
+        user.email,
+        mock_verification_link,
+        raw_verification_token,
+    )
+
+    return ResendVerificationResponse()
+

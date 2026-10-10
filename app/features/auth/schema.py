@@ -102,7 +102,8 @@ class UserResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
-
+    role: str
+    
     model_config = {"from_attributes": True}
 
 
@@ -126,3 +127,28 @@ class ForgotPasswordResponse(BaseModel):
 # Response schema for reset password route
 class ResetPasswordResponse(BaseModel):
     message: str = "Password has been successfully reset. You can now log in with your new password."
+
+
+# Request & Response schemas for Email Verification
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(
+        ...,
+        description="Email verification token received from the verification email link.",
+    )
+
+
+class VerifyEmailResponse(BaseModel):
+    message: str = "Email has been successfully verified."
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr = Field(
+        ...,
+        examples=["jane@example.com"],
+        description="Registered email address to resend verification link to.",
+    )
+
+
+class ResendVerificationResponse(BaseModel):
+    message: str = "A verification link has been sent to your email address."
+

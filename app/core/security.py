@@ -65,3 +65,12 @@ def generate_reset_token() -> str:
 # Password Reset Token — hash for DB storage
 def hash_reset_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode()).hexdigest()
+
+# Email Verification Token — random opaque string
+def generate_verification_token() -> str:
+    return secrets.token_hex(32)
+
+# Email Verification Token — hash for DB storage
+def hash_verification_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+

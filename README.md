@@ -277,14 +277,16 @@ The migration automatically seeds an admin user:
 | `POST` | `/api/auth/login`           | Authenticate existing user (Rate limited 5/min)| Public |
 | `POST` | `/api/auth/refresh`         | Obtain new access token & rotate refresh token | Public |
 | `POST` | `/api/auth/logout`          | Revoke refresh token (`revoked_at = now()`)    | Public |
-| `POST` | `/api/auth/forgot-password` | Request password reset link (Rate limited 3/min)| Public |
-| `POST` | `/api/auth/reset-password`  | Reset password using token (Rate limited 5/min) | Public |
+| `POST` | `/api/auth/forgot-password`     | Request password reset link (Rate limited 3/min)| Public |
+| `POST` | `/api/auth/reset-password`      | Reset password using token (Rate limited 5/min) | Public |
+| `GET/POST` | `/api/auth/verify-email`   | Verify email using 24h verification token      | Public |
+| `POST` | `/api/auth/resend-verification` | Resend email verification link (Rate limited 3/min)| Public |
 
 ### Profile Summary
 
-| Method | Endpoint        | Description                   | Auth                |
-| :----- | :-------------- | :---------------------------- | :------------------ |
-| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (any role) |
+| Method | Endpoint        | Description                   | Auth                            |
+| :----- | :-------------- | :---------------------------- | :------------------------------ |
+| `GET`  | `/api/profile/me` | Get profile of logged-in user | `Bearer` (Requires verified email)|
 
 ### Admin Summary
 
@@ -548,6 +550,54 @@ Validates the 15-minute reset token, enforces password strength rules, updates u
 - `400 Bad Request`: Token is invalid, expired, or already used.
 - `422 Unprocessable Entity`: Password fails strength requirements (uppercase, lowercase, digit, special character, min 8 chars).
 - `429 Too Many Requests`: Exceeded 5 requests per minute per IP.
+
+---
+
+#### 9. `GET /api/auth/verify-email?token=...` or `POST /api/auth/verify-email`
+
+Validates the 24-hour verification token received from the mock email link (`http://localhost:3000/verify-email?token=...`), sets `user.is_email_verified = True`, and marks the token as used (`used_at = now()`).
+
+**GET Query Parameter / POST Request Body:**
+
+`token`: Raw token string.
+
+**Success — `200 OK`:**
+
+```json
+{
+  "message": "Email has been successfully verified. You can now access all features."
+}
+```
+
+**Errors:**
+
+- `400 Bad Request`: Token is invalid, expired, or already used.
+
+---
+
+#### 10. `POST /api/auth/resend-verification`
+
+Generates a fresh 24-hour verification token and logs a new mock verification link for unverified users. Rate limited to **3 attempts per minute per IP**.
+
+**Request Body:**
+
+```json
+{
+  "email": "jane@example.com"
+}
+```
+
+**Success — `200 OK`:**
+
+```json
+{
+  "message": "If the email is registered and unverified, a new verification link has been sent."
+}
+```
+
+**Errors:**
+
+- `429 Too Many Requests`: Exceeded 3 requests per minute per IP.
 
 ---
 

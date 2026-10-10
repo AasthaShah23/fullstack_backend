@@ -20,6 +20,7 @@ class Settings:
         ).split(",")
         if origin.strip()
     ]
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 settings = Settings()
 

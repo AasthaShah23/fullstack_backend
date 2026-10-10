@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.email_verifications import EmailVerificationToken
 from app.models.password_resets import PasswordResetToken
 from app.models.refresh_tokens import RefreshToken
 from app.models.users import User
@@ -202,3 +203,77 @@ def revoke_all_user_refresh_tokens(db: Session, user_id: int) -> None:
             "Failed to revoke all refresh tokens for user_id=%s", user_id, exc_info=True
         )
         raise
+
+
+# Email Verification queries
+def create_email_verification_token(
+    db: Session,
+    *,
+    user_id: int,
+    token_hash: str,
+    expires_in_hours: int = 24,
+) -> EmailVerificationToken:
+    """Insert a new EmailVerificationToken row into DB."""
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+    verification_token = EmailVerificationToken(
+        user_id=user_id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+    try:
+        db.add(verification_token)
+        db.commit()
+        db.refresh(verification_token)
+        logger.debug(
+            "Email verification token stored — user_id=%s  expires_at=%s",
+            user_id,
+            expires_at.isoformat(),
+        )
+    except Exception:
+        db.rollback()
+        logger.error(
+            "Failed to store email verification token for user_id=%s", user_id, exc_info=True
+        )
+        raise
+    return verification_token
+
+
+def get_email_verification_token_by_hash(db: Session, token_hash: str) -> EmailVerificationToken | None:
+    """Return the EmailVerificationToken row matching *token_hash*, or None if not found."""
+    token = db.query(EmailVerificationToken).filter(EmailVerificationToken.token_hash == token_hash).first()
+    if token:
+        logger.debug("Found email verification token: id=%s  user_id=%s", token.id, token.user_id)
+    else:
+        logger.debug("No email verification token found for hash")
+    return token
+
+
+def mark_email_verification_token_used(db: Session, token_obj: EmailVerificationToken) -> None:
+    """Mark an email verification token as used."""
+    try:
+        token_obj.used_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(token_obj)
+        logger.debug("Marked email verification token id=%s as used", token_obj.id)
+    except Exception:
+        db.rollback()
+        logger.error(
+            "Failed to mark email verification token id=%s as used", token_obj.id, exc_info=True
+        )
+        raise
+
+
+def mark_user_email_as_verified(db: Session, user: User) -> None:
+    """Update user's is_email_verified flag to True."""
+    try:
+        user.is_email_verified = True
+        db.commit()
+        db.refresh(user)
+        logger.debug("Marked email as verified for user_id=%s", user.id)
+    except Exception:
+        db.rollback()
+        logger.error(
+            "Failed to mark email as verified for user_id=%s", user.id, exc_info=True
+        )
+        raise
+

@@ -10,16 +10,22 @@ from app.features.auth.schema import (
     LoginRequest,
     LogoutResponse,
     RefreshTokenRequest,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
     SignUpRequest,
     TokenResponse,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
 )
 from app.features.auth.service import (
     login_user,
     logout_user,
     process_forgot_password,
+    process_resend_verification,
     process_reset_password,
+    process_verify_email,
     refresh_access_token,
     signup_user,
 )
@@ -147,3 +153,40 @@ def reset_password(
 ) -> ResetPasswordResponse:
     logger.info("Reset password request submitted")
     return process_reset_password(db, payload)
+
+
+# GET /api/auth/verify-email
+@router.get(
+    "/verify-email",
+    response_model=VerifyEmailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify email using query token",
+    description=(
+        "Validates the 24-hour verification token from the query parameter and sets user.is_email_verified = True."
+    ),
+)
+def verify_email_get(
+    token: str,
+    db: Session = Depends(get_db),
+) -> VerifyEmailResponse:
+    logger.info("Email verification GET request received")
+    return process_verify_email(db, token)
+
+# POST /api/auth/resend-verification
+@router.post(
+    "/resend-verification",
+    response_model=ResendVerificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Resend email verification link",
+    description=(
+        "Generates a new 24-hour verification token and logs the mock verification link for unverified users."
+    ),
+)
+@limiter.limit("3/minute")
+def resend_verification(
+    request: Request,
+    payload: ResendVerificationRequest,
+    db: Session = Depends(get_db),
+) -> ResendVerificationResponse:
+    logger.info("Resend verification request for email=%s", payload.email)
+    return process_resend_verification(db, payload)

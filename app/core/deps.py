@@ -98,3 +98,19 @@ def require_role(required_role: str):
 
 # Convenient pre-configured dependency for admin-only routes
 require_admin = require_role("admin")
+
+
+# Email verification dependency for protected routes
+def require_verified_user(current_user: User = Depends(get_current_user)) -> User:
+
+    if not current_user.is_email_verified:
+        logger.warning(
+            "Access denied — unverified user_id=%s attempted to access protected route",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address to view profile details.",
+        )
+    return current_user
+
